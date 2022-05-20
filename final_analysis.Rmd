@@ -37,7 +37,8 @@ combineID <- function(df) {
 
 sales_2012 <- combineID(sales_2012)
 
-# removing useless information 
-sales_2012 <- sales_2012 %>%
-  select(-c(ExciseTaxNbr, SellerName, BuyerName))
+# # removing useless information 
+# sales_2012 <- sales_2012 %>%
+#   select(-c(ExciseTaxNbr, SellerName, BuyerName))
+# condominium = apartment but zoned 
 ```
