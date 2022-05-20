@@ -55,3 +55,19 @@ sales_2012 <- combineID(sales_2012)
 #   select(-c(ExciseTaxNbr, SellerName, BuyerName))
 # condominium = apartment but zoned 
 ```
+
+```{r residential}
+resBldg <- read.csv("./data/EXTR_ResBldg.csv")
+resBldg <- combineID(resBldg)
+
+```
+
+```{r merge}
+df <- sales_2012 %>%
+  left_join(resBldg, by="mm_key") %>%
+  left_join(accessory, by="mm_key")
+  
+```
+
+
+
