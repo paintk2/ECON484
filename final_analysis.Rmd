@@ -13,6 +13,18 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
+```{r accesorry}
+accessory <- read.csv("./data/EXTR_Accessory_V.csv")
+
+accessory <- accessory %>% 
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+  select(-c(Major, Minor, AccyDescr, UpdatedBy, UpdateDate))
+
+accessory <- accessory %>% 
+  filter(Size >= 0)
+
+accessory$AccyType <- as.factor(accessory$AccyType)
+```
 
 ```{r sales}
 # Data Wrangling 
