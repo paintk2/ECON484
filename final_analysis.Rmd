@@ -28,18 +28,19 @@ accessory$AccyType <- as.factor(accessory$AccyType)
 
 ```{r sales}
 # Data Wrangling 
-sales <- read.csv("./data/EXTR_RPSale.csv")
+raw_sales <- read.csv("./data/EXTR_RPSale.csv")
 
 #change document date to year/date format 
 # remove non-residential buildings
-sales_clean <- sales %>% 
+sales_clean <- raw_sales %>% 
   filter(PropertyType %in% c(10, 11, 12, 13, 14, 18, 19, 2, 3, 6)) %>% 
   # mutate(DocumentDate = as.numeric(substr(DocumentDate, 7, 10))) 
   mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
 
 
-sales_2012 <- sales_clean %>% 
+sales <- sales_clean %>% 
   filter(DocumentDate >= "2012-01-01")
+  
 
   # not including mobile homes, check 6 
 
@@ -49,19 +50,28 @@ combineID <- function(df) {
     mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
     select(-c(Major, Minor))
 }
-
 sales <- combineID(sales)
 # test <- sales %>% filter(str_detect(AFForestLand, 'Y'))
+
 # removing useless information
 sales <- sales %>%
   select(c(mm_key, DocumentDate, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
-
+sales$PropertyType <- as.factor(sales$PropertyType)
+sales$PrincipalUse <- as.factor(sales$PrincipalUse)
+sales$SaleInstrument <- as.factor(sales$SaleInstrument)
+sales$SaleReason <- as.factor(sales$SaleReason)
+sales$PropertyClass <- as.factor(sales$PropertyClass)
+str(sales)
 ```
 
 ```{r residential}
 resBldg <- read.csv("./data/EXTR_ResBldg.csv")
 resBldg <- combineID(resBldg)
 
+# removing useless
+# resBldg <- resBldg %>%
+#   select( -c(Address, BuildingNumber, Fraction, DirectionPrefix, StreetName, StreetType, DirectionSuffix, ))
+# str(res)
 ```
 
 ```{r merge}
