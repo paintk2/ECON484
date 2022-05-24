@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r packages}
 library(tidyverse)
+library(stringr)
 ```
 
 ```{r accesory}
@@ -107,22 +108,27 @@ valhist$LevyCode = as.factor(valhist$LevyCode)
 
 ```{r residential}
 resBldg <- read.csv("./data/EXTR_ResBldg.csv")
-resBldg <- combineID(resBldg)
+resBldg <- combineID(resBldg)s
 
 # removing useless
-# resBldg <- resBldg %>%
-#   select( -c(Address, BuildingNumber, Fraction, DirectionPrefix, StreetName, StreetType, DirectionSuffix, ))
-# str(res)
+resBldg <- resBldg %>%
+  select( -c(Address, BuildingNumber, Fraction, DirectionPrefix, StreetName, StreetType, DirectionSuffix, ))
+resBldg$BldgGrade <- as.factor(resBldg$BldgGrade)
+resBldg$FinBasementGrade <-
+  as.factor(resBldg$FinBasementGrade)
+resBldg$DaylightBasement <-
+  as.factor(resBldg$DaylightBasement) 
+resBldg$HeatSystem <- as.factor(resBldg$HeatSystem)
+resBldg$HeatSource <- as.factor(resBldg$HeatSource)
+resBldg <- resBldg %>% 
+  mutate(DaylightBasement = ifelse(tolower(DaylightBasement) == "y", 1, 0)) %>%
+  mutate(ViewUtilization = ifelse(tolower(ViewUtilization) == "y", 1, 0))
+
+resBldg %>% distinct(ViewUtilization)
+str(resBldg)
 ```
 
-```{r merge}
-df <- sales_2012 %>%
-  left_join(accessory, by="mm_key") %>%
-  left_join(homeexe, by="mm_key") %>%
-  left_join(valhist, by="mm_key") %>%
-  left_join(resBldg, by="mm_key")
-  
-```
+
 
 ```{r parcel}
 parcel <- read.csv("parcel.csv")
@@ -171,7 +177,25 @@ parcel_half[, 3:5] <- lapply(parcel_half[, 3:5], function(y) {if (y == "Y") { y 
 
 parcel_half[, 8:27] <- lapply(parcel_half[, 8:27], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
 
+rm(ls(parcel_half, parcel_red))
+
 parcel <- cbind(parcel_red, parcel_half)
+
+parcel <- parcel %>% 
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+  select(-c(Major, Minor))
+```
+
+
+```{r merge}
+df <- sales_2012 %>%
+  left_join(accessory, by="mm_key") %>%
+  left_join(homeexe, by="mm_key") %>%
+  left_join(valhist, by="mm_key") %>%
+  left_join(resBldg, by="mm_key") %>%
+  left_join(parcel, by="mm_key") %>%
+  left_join()
+  
 ```
 
 
