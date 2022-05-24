@@ -51,6 +51,7 @@ combineID <- function(df) {
     mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
     select(-c(Major, Minor))
 }
+
 sales <- combineID(sales)
 # test <- sales %>% filter(str_detect(AFForestLand, 'Y'))
 
@@ -62,6 +63,8 @@ sales$PrincipalUse <- as.factor(sales$PrincipalUse)
 sales$SaleInstrument <- as.factor(sales$SaleInstrument)
 sales$SaleReason <- as.factor(sales$SaleReason)
 sales$PropertyClass <- as.factor(sales$PropertyClass)
+
+sales %>% distinct(AFNonProfitUse)
 str(sales)
 ```
 
