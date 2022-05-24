@@ -52,8 +52,23 @@ combineID <- function(df) {
     select(-c(Major, Minor))
 }
 
+factorYN <- function(col) {
+  col <- toupper(col)
+  if (str_detect(col, "Y|1")) {
+    return(1)
+  }
+  return(0)
+
+}
+resBldg <- resBldg %>%
+  mutate(DaylightBasement = factorYN(DaylightBasement))
+# resBldg <- resBldg %>% 
+#   mutate(DaylightBasement = ifelse(tolower(DaylightBasement) == "y", 1, 0)) %>%
+#   mutate(ViewUtilization = ifelse(tolower(ViewUtilization) == "y", 1, 0))
 sales <- combineID(sales)
 # test <- sales %>% filter(str_detect(AFForestLand, 'Y'))
+sales %>%
+  mutate(AFForestLand = factorYN(AFForestLand))
 
 # removing useless information
 sales <- sales %>%
@@ -65,7 +80,14 @@ sales$SaleReason <- as.factor(sales$SaleReason)
 sales$PropertyClass <- as.factor(sales$PropertyClass)
 
 sales %>% distinct(AFNonProfitUse)
-str(sales)
+test <- sales %>% 
+  group_by(mm_key) %>%
+  count()
+
+
+nrow(test)
+nrow(sales)
+
 ```
 
 ```{r permits}
