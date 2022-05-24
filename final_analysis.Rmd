@@ -124,5 +124,55 @@ df <- sales_2012 %>%
   
 ```
 
+```{r parcel}
+parcel <- read.csv("parcel.csv")
+
+parcel_red <- parcel %>% 
+  select(-c(PropName, PlatName, PlatLot, SpecArea, SpecSubArea))  #plat lot ?? check 
+
+rm(parcel)
+
+parcel_red$Area <- as.factor(parcel_red$Area)
+
+parcel_red$SubArea <- as.factor(parcel_red$SubArea)
+
+parcel_red$HBUAsIfVacant <- as.factor(parcel_red$HBUAsIfVacant)
+
+parcel_red$HBUAsImproved <- as.factor(parcel_red$HBUAsImproved)
+
+parcel_red[, 18:24] <- lapply(parcel_red[, 18:24], function(y) {as.factor(y)})
+
+parcel_red <- parcel_red %>% 
+  mutate(Unbuildable = ifelse(Unbuildable == "True", 1, 0))
+
+parcel_red[, 27:36] <- lapply(parcel_red[, 27:36], function(y) {as.factor(y)}) 
+
+parcel_red[, 39:41] <- lapply(parcel_red[, 39:41], function(y) {as.factor(y)})
+
+parcel_red[, 44:46] <- lapply(parcel_red[, 44:46], function(y) {as.factor(y)})
+
+parcel_red$HistoricSite <- as.factor(parcel_red$HistoricSite)
+
+parcel_red$CurrentUseDesignation <- as.factor(parcel_red$CurrentUseDesignation)
+
+parcel_red[, 42:43] <- lapply(parcel_red[, 42:43], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel_red[, 48:49] <- lapply(parcel_red[, 48:49], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel_red[, 74:75] <- lapply(parcel_red[, 74:75], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel_half <- parcel_red %>% 
+  select(NbrBldgSites:OtherProblems)
+
+parcel_red <- parcel_red %>% 
+  select(Major:OtherNuisances)
+
+parcel_half[, 3:5] <- lapply(parcel_half[, 3:5], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel_half[, 8:27] <- lapply(parcel_half[, 8:27], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel <- cbind(parcel_red, parcel_half)
+```
+
 
 
