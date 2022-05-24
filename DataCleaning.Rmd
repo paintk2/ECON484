@@ -1,0 +1,173 @@
+---
+title: "GroupPaper"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Importing relevant data sets
+library(readr)
+getwd()
+sales_data = read_csv("data/EXTR_RPSale.csv") #Real Property Sales (.ZIP)
+com_building = read_csv("data/EXTR_CommBldg.csv") #Commercial Building (.ZIP)
+com_specialuse = read_csv("data/EXTR_CommBldgSection.csv")
+com_feature = read_csv("data/EXTR_CommBldgFeature.csv")
+condo_complex = read_csv("data/EXTR_CondoComplex.csv")
+condo_units = read_csv("data/EXTR_CondoUnit2.csv")
+env_restrict = read_csv("data/EXTR_EnvironmentalRestriction_V.csv")
+apt.complex = read_csv("data/EXTR_AptComplex.csv")
+```
+
+```{r}
+#Commercial buildings data set
+library(dplyr)
+#DF of Combination of unique Major & Minor 
+test = data.frame(com_building)
+unique_commerical = distinct(test, test$Major,test$Minor, .keep_all = TRUE) #Data set of all unique MajorMinor Combs
+cleaned_cb1 = unique_commerical %>%
+select(Major,Minor, NbrBldgs, StreetType, NbrStories, PredominantUse, Shape, ConstrClass, BldgQuality,BldgGrossSqFt,YrBuilt, PcntComplete, HeatingSystem,Sprinklers,Elevators ) %>%
+mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+select(-c(Major, Minor))
+factor_cols = c("PredominantUse","Shape","ConstrClass","BldgQuality","HeatingSystem")
+cleaned_cb1[,factor_cols]= lapply(cleaned_cb1[,factor_cols],as.factor)
+write.csv(cleaned_cb1,"data/Cleaned_CommBldg.csv", row.names = FALSE)
+```
+
+```{r}
+#Commercial Building Seperate Use Data set
+#Cleaning and Factoring colomn Section Use
+test = data.frame(com_specialuse)
+cleaned_cb2 = test %>%
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+select(-c(Major, Minor)) %>%
+  select(mm_key,SectionUse,NbrStories,StoryHeight,GrossSqFt)
+factor_cols = c("SectionUse")
+#Divide Data as causing crash when applying factor to SectionUse
+chunk <- 10000
+n <- nrow(cleaned_cb2)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_cb2, r)
+d <- lapply(d, function(x){
+  x$SectionUse <- factor(x$SectionUse)
+  return(x)
+})
+cleaned_cb2 <- bind_rows(d)
+write.csv(cleaned_cb2,"data/Cleaned_CommBldgSection.csv", row.names = FALSE)
+```
+
+```{r}
+#Commercial Building Special Features Data Set 
+#Cleaning
+test = data.frame(com_feature)
+cleaned_cb3 = test %>%
+   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+select(-c(Major, Minor)) %>%
+select(mm_key, FeatureType, GrossSqFt, NetSqFt) 
+cleaned_cb3$FeatureType = as.factor(cleaned_cb3$FeatureType)
+write.csv(cleaned_cb3,"data/Cleaned_CommBldgFeature.csv", row.names = FALSE)
+```
+
+```{r}
+#Envrionmental Restrictions Data Set
+#Cleaning and Factor Type
+test = data.frame(env_restrict)
+cleaned_env = test %>%
+   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+select(-c(Major, Minor)) %>%
+select(mm_key,Type,DelineationStudy,PcntAffected)
+factor_cols = c("Type")
+#Splitting
+chunk <- 10000
+n <- nrow(cleaned_env)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_env, r)
+#Applying Factor 
+d <- lapply(d, function(x){
+  x$Type = as.factor(x$Type)
+  return(x)
+})
+cleaned_env = bind_rows(d)
+write.csv(cleaned_env,"data/Cleaned_EnvironmentalRestrictions.csv", row.names = FALSE)
+```
+
+
+```{r}
+#Condo Complex Data Set
+#Creating a Minor index of 0000 to create mm_key
+c ="Minor"
+test = data.frame(condo_complex)
+test["Minor"] = "0000"
+cleaned_condo_complex = test %>%
+  relocate(Minor,.after = Major)%>%
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%  #Creating mm_key
+  select(-c(Major, Minor)) %>%
+  select(-c(ComplexDescr, EffYr,Address,BuildingNumber,Fraction,DirectionPrefix,StreetName,DirectionSuffix,ZipCode))
+#Applying Factor
+cleaned_condo_complex$ComplexType = as.factor(cleaned_condo_complex$ComplexType)
+cleaned_condo_complex$ProjectLocation = as.factor(cleaned_condo_complex$ProjectLocation)
+cleaned_condo_complex$ProjectAppeal = as.factor(cleaned_condo_complex$ProjectAppeal)
+cleaned_condo_complex$ConstrClass = as.factor(cleaned_condo_complex$ConstrClass)
+cleaned_condo_complex$BldgQuality = as.factor(cleaned_condo_complex$BldgQuality)
+cleaned_condo_complex$Condition = as.factor(cleaned_condo_complex$Condition)
+cleaned_condo_complex$Laundry = as.factor(cleaned_condo_complex$Laundry)
+cleaned_condo_complex$CondoLandType = as.factor(cleaned_condo_complex$CondoLandType)
+write.csv(cleaned_condo_complex,"data/Cleaned_CondoComplex.csv", row.names = FALSE)
+  
+```
+
+```{r}
+#Condo Units Data Set
+
+test = data.frame(condo_units)
+cleaned_condo_units = test %>%
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%  #Creating mm_key
+  select(-c(Major, Minor)) %>%
+  select(-c(BldgNbr, UnitNbr,MHomeDescr,PersPropAcctNbr,Address,BuildingNumber,Fraction,DirectionPrefix,StreetName,DirectionSuffix,UnitDescr,ZipCode)) #Removing Non relevant Vars
+
+#Splitting
+chunk <- 10000
+n <- nrow(cleaned_condo_units)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_condo_units, r)
+
+#Applying Factors 
+d <- lapply(d, function(x){
+  x$UnitType = as.factor(x$UnitType)
+  x$UnitQuality = as.factor(x$UnitQuality) 
+  x$UnitLoc = as.factor(x$UnitLoc)
+  x$UnitOfMeasure = as.factor(x$UnitOfMeasure)
+  x$Condition = as.factor(x$Condition)
+  x$OtherRoom = as.factor(x$OtherRoom) 
+  x$ViewMountain = as.factor(x$ViewMountain)
+ x$ViewLakeRiver = as.factor(x$ViewLakeRiver)
+ x$ViewCityTerritorial = as.factor(x$ViewCityTerritorial)
+ x$ViewPugetSound = as.factor(x$ViewPugetSound)
+ x$ViewLakeWaSamm = as.factor(x$ViewLakeWaSamm)
+ x$PkgOpen = as.factor(x$PkgOpen)
+ x$PkgCarport = as.factor(x$PkgCarport)
+ x$PkgBasement = as.factor(x$PkgBasement)
+ x$PkgBasementTandem = as.factor(x$PkgBasementTandem)
+ x$PkgGarage = as.factor(x$PkgGarage)
+ x$PkgGarageTandem = as.factor(x$PkgGarageTandem)
+ x$PkgOtherType = as.factor(x$PkgOtherType)
+ x$Grade = as.factor(x$Grade)
+  return(x)
+})
+
+#Merging Data Partitions
+cleaned_condo_units = bind_rows(d)
+write.csv(cleaned_condo_units,"data/Cleaned_CondoUnit2.csv", row.names = FALSE)
+```
+
+```{r}
+test = data.frame(sales_data)
+cleaned_sales = test %>%
+   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%  #Creating mm_key
+  select(-c(Major, Minor))
+  
+```
+
+
