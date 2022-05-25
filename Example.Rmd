@@ -65,10 +65,6 @@ r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
 d <- split(cleaned_env, r)
 
 d2 <- lapply(d, function(x){
-  # This works: x$Type <- factor(x$Type)
-  # We want to apply to list of df instead of on single df
-  #x[,factor_cols] <- lapply(x[,factor_cols],get_val)
-  # x[,factor_cols] <- lapply(seq_along(colname),as.factor)
   for (col in factor_cols){
     x[col] <- lapply(x[col],get_val)
     x[col] <- lapply(x[col],as.factor)
