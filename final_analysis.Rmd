@@ -60,6 +60,7 @@ factorYN <- function(col) {
   return(0)
 
 }
+
 resBldg <- resBldg %>%
   mutate(DaylightBasement = factorYN(DaylightBasement))
 # resBldg <- resBldg %>% 
@@ -84,7 +85,9 @@ test <- sales %>%
   group_by(mm_key) %>%
   count()
 
-
+lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+sales$AFCurrentUseLand <- lookup[sales$AFCurrentUseLand]
+sales$AFCurrentUseLand[is.na(sales$AFCurrentUseLand)] = 0
 nrow(test)
 nrow(sales)
 
