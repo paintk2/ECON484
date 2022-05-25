@@ -52,24 +52,8 @@ combineID <- function(df) {
     select(-c(Major, Minor))
 }
 
-factorYN <- function(col) {
-  col <- toupper(col)
-  if (str_detect(col, "Y|1")) {
-    return(1)
-  }
-  return(0)
-
-}
-
-resBldg <- resBldg %>%
-  mutate(DaylightBasement = factorYN(DaylightBasement))
-# resBldg <- resBldg %>% 
-#   mutate(DaylightBasement = ifelse(tolower(DaylightBasement) == "y", 1, 0)) %>%
-#   mutate(ViewUtilization = ifelse(tolower(ViewUtilization) == "y", 1, 0))
 sales <- combineID(sales)
 # test <- sales %>% filter(str_detect(AFForestLand, 'Y'))
-sales %>%
-  mutate(AFForestLand = factorYN(AFForestLand))
 
 # removing useless information
 sales <- sales %>%
@@ -80,16 +64,18 @@ sales$SaleInstrument <- as.factor(sales$SaleInstrument)
 sales$SaleReason <- as.factor(sales$SaleReason)
 sales$PropertyClass <- as.factor(sales$PropertyClass)
 
-sales %>% distinct(AFNonProfitUse)
-test <- sales %>% 
-  group_by(mm_key) %>%
-  count()
+# sales %>% distinct(AFNonProfitUse)
+# test <- sales %>% 
+#   group_by(mm_key) %>%
+#   count()
 
+# replace Y,y,N,n,0,1 and NULL values with binary 0's and 1's
 lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
 sales$AFCurrentUseLand <- lookup[sales$AFCurrentUseLand]
 sales$AFCurrentUseLand[is.na(sales$AFCurrentUseLand)] = 0
-nrow(test)
-nrow(sales)
+# 
+# nrow(test)
+# nrow(sales)
 
 ```
 
