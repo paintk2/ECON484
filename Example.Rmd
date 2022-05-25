@@ -1,0 +1,104 @@
+---
+title: "Untitled"
+author: "Yeji Sohn"
+date: '2022-05-25'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+#Importing relevant data sets
+library(readr)
+setwd("C:/Users/sohny/Documents/GitHub/ECON484")
+cleaned_env <- read.csv("data/EXTR_EnvironmentalRestriction_V.csv")
+```
+
+```{r}
+#Envrionmental Restrictions Data Set
+#Cleaning and Factor Type
+library(tidyverse)
+library(rlang)
+
+library(tidyverse)
+library(rlang)
+test = data.frame(env_restrict)
+cleaned_env = test %>%
+   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+select(-c(Major, Minor)) %>%
+select(mm_key,Type,DelineationStudy,PcntAffected)
+factor_cols = c("Type")
+#Splitting
+chunk <- 10000
+n <- nrow(cleaned_env)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_env, r)
+#Applying Factor 
+d <- lapply(d, function(x){
+  x$Type = as.factor(x$Type)
+  return(x)
+})
+cleaned_env = bind_rows(d)
+
+```
+
+```{r}
+get_val <- function(val){
+  if(is.na(val)){
+    return(NA)
+  }else if(val == "N" || val == "n" || val == "0"){
+    return(0)
+  }else if(val == "Y" || val == "y" || val == "1"){
+    return(1)
+  }
+}
+
+factor_cols <- c("DelineationStudy")
+
+# divide data and save
+chunk <- 10000
+n <- nrow(cleaned_env)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_env, r)
+
+d <- lapply(d, function(x){
+  # This works: x$Type <- factor(x$Type)
+  # We want to apply to list of df instead of on single df
+  #x[,factor_cols] <- lapply(x[,factor_cols],get_val)
+  x[,factor_cols] <- lapply(seq_along(colname),as.factor)
+  return(x)
+})
+
+lapply(cleaned_env[,"DelineationStudy"],as.factor)
+
+# combine subsets into one dataset
+cleaned_env_test <- bind_rows(d)
+```
+
+
+```{r}
+#Function to take df, and colname
+library(glue)
+#Function that takes d as dataframe, and the rest of params as colname
+test = function(d,c1,...){
+colname = c(c1,...)  #stores the colnames in a vector 
+print(colname)
+for(i in seq_along(colname)){ #Loop through vector of colname
+    x = colname[i]
+    print(class(x))
+  library(rlang)
+ # Mutate function using GLUE library for stirng literarls for var name. Also converting the x value to class       type of symbol from charecter so it can be used in mutate function. Nested loop that looks for NA first if true return Real NA, else it continues to next loop to covnert convert
+    
+    test1 = mutate(d,"{eval(expr({{x}}))}" := ifelse((is.na("{eval(expr({{x}}))}")),NA_real_, ifelse(("{eval(expr({{x}}))}") == "y",1,0))) 
+  
+  
+ 
+ print(d) 
+  
+}
+ return(test1)
+}
+```
