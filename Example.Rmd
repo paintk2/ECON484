@@ -64,18 +64,22 @@ n <- nrow(cleaned_env)
 r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
 d <- split(cleaned_env, r)
 
-d <- lapply(d, function(x){
+d2 <- lapply(d, function(x){
   # This works: x$Type <- factor(x$Type)
   # We want to apply to list of df instead of on single df
   #x[,factor_cols] <- lapply(x[,factor_cols],get_val)
-  x[,factor_cols] <- lapply(seq_along(colname),as.factor)
+  # x[,factor_cols] <- lapply(seq_along(colname),as.factor)
+  for (col in factor_cols){
+    x[col] <- lapply(x[col],get_val)
+    x[col] <- lapply(x[col],as.factor)
+  }
   return(x)
 })
 
-lapply(cleaned_env[,"DelineationStudy"],as.factor)
-
 # combine subsets into one dataset
-cleaned_env_test <- bind_rows(d)
+cleaned_env_test <- bind_rows(d2)
+cleaned_env_test %>%
+  filter(is.na(DelineationStudy))
 ```
 
 
