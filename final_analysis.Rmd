@@ -35,6 +35,7 @@ raw_sales <- read.csv("./data/EXTR_RPSale.csv")
 # remove non-residential buildings
 sales_clean <- raw_sales %>% 
   filter(PropertyType %in% c(10, 11, 12, 13, 14, 18, 19, 2, 3, 6)) %>% 
+  filter(PrincipalUse == 6) %>% 
   # mutate(DocumentDate = as.numeric(substr(DocumentDate, 7, 10))) 
   mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
 
@@ -95,7 +96,7 @@ sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0
 # remove rows with 0 improvement value
 # factor data
 
-homeexe <- read.csv('EXTR_HomeImpExempts.csv')
+homeexe <- read.csv('./data/EXTR_HomeImpExempts.csv')
 
 homeexe <- homeexe %>%
   mutate(mm_key = paste0(Major, '-', Minor), ValueDate = substr(ValueDate, 1, 4), .before = 1) %>%
@@ -115,7 +116,7 @@ homeexe$NoteId = as.factor(homeexe$NoteId)
 # combine major and minor
 # factor data
 
-valhist <- read.csv('EXTR_ValueHistory_V.csv')
+valhist <- read.csv('./data/EXTR_ValueHistory_V.csv')
 
 valhist <- valhist %>%
   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%
@@ -131,7 +132,7 @@ valhist$LevyCode = as.factor(valhist$LevyCode)
 
 ```{r residential}
 resBldg <- read.csv("./data/EXTR_ResBldg.csv")
-resBldg <- combineID(resBldg)s
+resBldg <- combineID(resBldg)
 
 # removing useless
 resBldg <- resBldg %>%
@@ -154,7 +155,7 @@ str(resBldg)
 
 
 ```{r parcel}
-parcel <- read.csv("parcel.csv")
+parcel <- read.csv("./data/EXTR_Parcel.csv")
 
 parcel_red <- parcel %>% 
   select(-c(PropName, PlatName, PlatLot, SpecArea, SpecSubArea))  #plat lot ?? check 
@@ -200,7 +201,7 @@ parcel_half[, 3:5] <- lapply(parcel_half[, 3:5], function(y) {if (y == "Y") { y 
 
 parcel_half[, 8:27] <- lapply(parcel_half[, 8:27], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
 
-rm(ls(parcel_half, parcel_red))
+# rm(ls(parcel_half, parcel_red))
 
 parcel <- cbind(parcel_red, parcel_half)
 
@@ -209,16 +210,144 @@ parcel <- parcel %>%
   select(-c(Major, Minor))
 ```
 
+```{r}
+# importing stuff
+condo_complex = read_csv("data/EXTR_CondoComplex.csv")
+condo_units = read_csv("data/EXTR_CondoUnit2.csv")
+env_restrict = read_csv("data/EXTR_EnvironmentalRestriction_V.csv")
+```
+
+```{r}
+#Function to Sort Y/N
+library(glue)
+y = data.frame()
+test = function(d,c1,...){
+colname = c(c1,...) 
+print(colname)
+print(length(colname))
+for(i in seq_along(colname)){
+    x = colname[i]
+    print(x)
+    print(class(x))
+    lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+    factor_cols <- c(x)
+    d[, factor_cols] = lookup[d[,factor_cols]]
+    
+    
+}
+ return(d)
+}
+
+```
+
+```{r}
+#Condo Units Data Set
+
+cu_df = data.frame(condo_units)
+cleaned_condo_units = cu_df %>%
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%  #Creating mm_key
+  select(-c(Major, Minor)) %>%
+  select(-c(BldgNbr, UnitNbr,MHomeDescr,PersPropAcctNbr,Address,BuildingNumber,Fraction,DirectionPrefix,StreetName,DirectionSuffix,UnitDescr,ZipCode)) #Removing Non relevant Vars
+
+#Splitting
+chunk <- 10000
+n <- nrow(cleaned_condo_units)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_condo_units, r)
+
+#Applying Factors 
+d <- lapply(d, function(x){
+  x$UnitType = as.factor(x$UnitType)
+  x$UnitQuality = as.factor(x$UnitQuality) 
+  x$UnitLoc = as.factor(x$UnitLoc)
+  x$UnitOfMeasure = as.factor(x$UnitOfMeasure)
+  x$Condition = as.factor(x$Condition)
+  x$OtherRoom = as.factor(x$OtherRoom) 
+  x$ViewMountain = as.factor(x$ViewMountain)
+ x$ViewLakeRiver = as.factor(x$ViewLakeRiver)
+ x$ViewCityTerritorial = as.factor(x$ViewCityTerritorial)
+ x$ViewPugetSound = as.factor(x$ViewPugetSound)
+ x$ViewLakeWaSamm = as.factor(x$ViewLakeWaSamm)
+ x$PkgOpen = as.factor(x$PkgOpen)
+ x$PkgCarport = as.factor(x$PkgCarport)
+ x$PkgBasement = as.factor(x$PkgBasement)
+ x$PkgBasementTandem = as.factor(x$PkgBasementTandem)
+ x$PkgGarage = as.factor(x$PkgGarage)
+ x$PkgGarageTandem = as.factor(x$PkgGarageTandem)
+ x$PkgOtherType = as.factor(x$PkgOtherType)
+ x$Grade = as.factor(x$Grade)
+  return(x)
+})
+
+cleaned_condo_units %>%
+  group_by(mm_key) %>%
+count(mm_key) %>%
+filter(n >1)
+
+
+
+#Merging Data Partitions
+cleaned_condo_units = bind_rows(d)
+c_units = test(cleaned_condo_units, "TopFloor", "Fireplace","EndUnit")
+```
+
+
+```{r}
+#Envrionmental Restrictions Data Set
+#Cleaning and Factor Type
+library(tidyverse)
+library(rlang)
+er_df = data.frame(env_restrict)
+cleaned_env = er_df %>%
+   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+select(-c(Major, Minor)) %>%
+select(mm_key,Type,DelineationStudy,PcntAffected)
+factor_cols = c("Type")
+#Splitting
+chunk <- 10000
+n <- nrow(cleaned_env)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_env, r)
+#Applying Factor 
+d <- lapply(d, function(x){
+  x$Type = as.factor(x$Type)
+  return(x)
+})
+cleaned_env = bind_rows(d)
+
+
+
+
+# library(rlang)
+  #test1 = mutate(d,"{eval(expr({{x}}))}" := ifelse((is.na("{eval(expr({{x}}))}")),NA_real_, ifelse(("{eval(expr({{x}}))}") == "y",1,0)))
+
+
+#lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+#factor_cols <- c("DelineationStudy")
+#cleaned_env[,factor_cols] <- lookup[cleaned_env[,factor_cols]]
+#cleaned_env
+
+
+ env = test(cleaned_env,"DelineationStudy")
+
+```
+
 
 ```{r merge}
-df <- sales_2012 %>%
-  left_join(accessory, by="mm_key") %>%
-  left_join(homeexe, by="mm_key") %>%
-  left_join(valhist, by="mm_key") %>%
-  left_join(resBldg, by="mm_key") %>%
-  left_join(parcel, by="mm_key") %>%
-  left_join()
+View(distinct(resBldg, mm_key))
+View(distinct(df, AccyType))
+
+df <- sales %>%
+  # left_join(accessory, by="mm_key") %>%
+  # left_join(homeexe, by="mm_key") %>%
+  left_join(resBldg, by="mm_key")
+  # left_join(parcel, by="mm_key") %>%
+  # left_join(c_units, by="mm_key")
   
+  # left_join(valhist, by="mm_key") %>%
+  # left_join(env, by="mm_key") %>%
+
+write.csv(df, "sales.csv", row.names = FALSE)
 ```
 
 
