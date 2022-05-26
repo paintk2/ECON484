@@ -18,7 +18,6 @@ com_feature = read_csv("data/EXTR_CommBldgFeature.csv")
 condo_complex = read_csv("data/EXTR_CondoComplex.csv")
 condo_units = read_csv("data/EXTR_CondoUnit2.csv")
 env_restrict = read_csv("data/EXTR_EnvironmentalRestriction_V.csv")
-apt.complex = read_csv("data/EXTR_AptComplex.csv")
 ```
 
 ```{r}
@@ -27,10 +26,13 @@ library(dplyr)
 #DF of Combination of unique Major & Minor 
 test = data.frame(com_building)
 unique_commerical = distinct(test, test$Major,test$Minor, .keep_all = TRUE) #Data set of all unique MajorMinor Combs
-cleaned_cb1 = unique_commerical %>%
+cleaned_cb1 = test %>%
 select(Major,Minor, NbrBldgs, StreetType, NbrStories, PredominantUse, Shape, ConstrClass, BldgQuality,BldgGrossSqFt,YrBuilt, PcntComplete, HeatingSystem,Sprinklers,Elevators ) %>%
 mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
 select(-c(Major, Minor))
+
+unique_mm = distinct(cleaned_cb1, cleaned_cb1$mm_key, .keep_all = TRUE)
+  
 factor_cols = c("PredominantUse","Shape","ConstrClass","BldgQuality","HeatingSystem")
 cleaned_cb1[,factor_cols]= lapply(cleaned_cb1[,factor_cols],as.factor)
 write.csv(cleaned_cb1,"data/Cleaned_CommBldg.csv", row.names = FALSE)
@@ -73,6 +75,8 @@ write.csv(cleaned_cb3,"data/Cleaned_CommBldgFeature.csv", row.names = FALSE)
 ```{r}
 #Envrionmental Restrictions Data Set
 #Cleaning and Factor Type
+library(tidyverse)
+library(rlang)
 test = data.frame(env_restrict)
 cleaned_env = test %>%
    mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
@@ -90,7 +94,22 @@ d <- lapply(d, function(x){
   return(x)
 })
 cleaned_env = bind_rows(d)
-write.csv(cleaned_env,"data/Cleaned_EnvironmentalRestrictions.csv", row.names = FALSE)
+
+
+
+
+# library(rlang)
+  #test1 = mutate(d,"{eval(expr({{x}}))}" := ifelse((is.na("{eval(expr({{x}}))}")),NA_real_, ifelse(("{eval(expr({{x}}))}") == "y",1,0)))
+
+
+#lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+#factor_cols <- c("DelineationStudy")
+#cleaned_env[,factor_cols] <- lookup[cleaned_env[,factor_cols]]
+#cleaned_env
+
+
+ env = test(cleaned_env,"DelineationStudy")
+
 ```
 
 
@@ -115,6 +134,7 @@ cleaned_condo_complex$Condition = as.factor(cleaned_condo_complex$Condition)
 cleaned_condo_complex$Laundry = as.factor(cleaned_condo_complex$Laundry)
 cleaned_condo_complex$CondoLandType = as.factor(cleaned_condo_complex$CondoLandType)
 write.csv(cleaned_condo_complex,"data/Cleaned_CondoComplex.csv", row.names = FALSE)
+
   
 ```
 
@@ -157,9 +177,16 @@ d <- lapply(d, function(x){
   return(x)
 })
 
+cleaned_condo_units %>%
+  group_by(mm_key) %>%
+count(mm_key) %>%
+filter(n >1)
+
+
+
 #Merging Data Partitions
 cleaned_condo_units = bind_rows(d)
-write.csv(cleaned_condo_units,"data/Cleaned_CondoUnit2.csv", row.names = FALSE)
+c_units = test(cleaned_condo_units, "TopFloor", "Fireplace","EndUnit")
 ```
 
 ```{r}
@@ -170,4 +197,27 @@ cleaned_sales = test %>%
   
 ```
 
+
+```{r}
+#Function to Sort Y/N
+library(glue)
+y = data.frame()
+test = function(d,c1,...){
+colname = c(c1,...) 
+print(colname)
+print(length(colname))
+for(i in seq_along(colname)){
+    x = colname[i]
+    print(x)
+    print(class(x))
+    lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+    factor_cols <- c(x)
+    d[, factor_cols] = lookup[d[,factor_cols]]
+    
+    
+}
+ return(d)
+}
+
+```
 
