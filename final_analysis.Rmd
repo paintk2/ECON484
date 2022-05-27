@@ -390,6 +390,33 @@ write.csv(df, "sales.csv", row.names = FALSE)
 ```
 
 
+```{r clean}
+# Analyzing how to clean the final data
+
+# chekcing of NA
+sapply(final_df, function(x) sum(x == 0))
+# No NA, but for example, there are empty cells in Zipcode when I look at them in view
+# ZipCode: Character -> keep first 5 numbers and factor
+
+# checking of 0s
+sapply(final_df, function(x) sum(x == 0))
+# zipcode: 1 
+# Building grade variation ?? most of non 0 obs are 99
+# SqFt columns: check if their floor count matches
+# SqFtTotLiving: 1
+# Brickstone?? 0-100
+# Do we want to keep Bath 3qtrcount?? or convert them to full count
+# PcntComplete: 311765
+# Obsolescence??
+# PcntNetCondition: mostly 0. Maybe drop b/c Condition column already has information on the condition
+# 
+
+unique(final_df$ZipCode)
+```
+
+```{r}
+unique(final_df$Obsolescence)
+```
 
 ```{r}
 # This code needs variables to be renamed and cleaned
