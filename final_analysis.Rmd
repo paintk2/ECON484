@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r packages}
 library(tidyverse)
 library(stringr)
+library(fastDummies)
 ```
 
 ```{r accesory}
@@ -19,23 +20,21 @@ accessory <- read.csv("./data/EXTR_Accessory_V.csv")
 
 accessory <- accessory %>% 
   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
-  select(-c(Major, Minor, AccyDescr, UpdatedBy, UpdateDate))
+  select(-c(Major, Minor, AccyDescr, UpdatedBy, UpdateDate)) %>% 
+  mutate(DateValued = substr(DateValued, 1, 4))
 
 accessory <- accessory %>% 
   filter(Size >= 0)
 
 accessory$AccyType <- as.factor(accessory$AccyType)
 
-library(fastDummies)
-
-accessory_check <- accessory %>% 
+accessory <- accessory %>% 
   select(mm_key, AccyType, DateValued) %>% 
   group_by(mm_key, DateValued) %>% 
   dummy_cols(select_columns = "AccyType") %>%
-  select(-AccyType) 
-## Katt needs to group by mm_key, sum the rows, merge it
-# and check for duplicates 
-
+  select(-AccyType) %>% 
+  group_by(mm_key, DateValued) %>% 
+  summarise(across(where(is.numeric), sum))
 ```
 
 ```{r sales}
@@ -351,14 +350,20 @@ View(distinct(resBldg, mm_key))
 View(distinct(df, AccyType))
 
 final_df <- sales %>%
+  filter(SalePrice > 0) %>% 
   left_join(resBldg, by="mm_key") %>%
   group_by(mm_key, DocumentDate) %>%
   filter(DocumentDate >= YrBuilt) %>%
-  filter(YrBuilt == max(YrBuilt))
-
-
-test <- final_df %>%
-  left_join(accessory, by="mm_key") %>% 
+  filter(YrBuilt == max(YrBuilt)) 
+  
+# test <- final_df %>%
+#   left_join(accessory, by="mm_key") %>% 
+#   relocate(DateValued, .after = DocumentDate) %>% 
+#   mutate(DateValued = ifelse(DateValued == "1900", NA, DateValued)) %>% 
+#   group_by(mm_key, DocumentDate) %>%
+#   filter(DocumentDate >= DateValued) 
+#   
+  
   group_by(mm_kry, DocumentDate) %>% 
   
   # left_join(accessory, by="mm_key") %>%
