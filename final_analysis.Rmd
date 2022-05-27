@@ -352,3 +352,20 @@ write.csv(df, "sales.csv", row.names = FALSE)
 
 
 
+```{r}
+# This code needs variables to be renamed and cleaned
+# Should use the merged dataset
+
+sales <- left_join(sales, homeexe, by="mm_key")
+sales_small <- sales[c("mm_key", "DocumentDate", "ValueDate")]
+sales_small$ValueDate <- as.integer(sales_small$ValueDate)
+sales_small$DocumentDate <- as.integer(format(sales_small$DocumentDate,"%Y"))
+
+# If valuedate is less than Documentdate, keep it
+# If valuedate is greater than DocumentDate, NA
+sales_test <- sales_small %>%
+  mutate(HIExemptId = ifelse(ValueDate <= as.numeric(DocumentDate), HIExemptId, NA),
+         NoteId     = ifelse(ValueDate <= as.numeric(DocumentDate), NoteId, NA),
+         HomeImpVal = ifelse(ValueDate <= as.numeric(DocumentDate), HomeImpVal, NA),
+         ValueDate = ifelse(ValueDate <= as.numeric(DocumentDate), ValueDate, NA))
+```
