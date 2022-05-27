@@ -25,6 +25,17 @@ accessory <- accessory %>%
   filter(Size >= 0)
 
 accessory$AccyType <- as.factor(accessory$AccyType)
+
+library(fastDummies)
+
+accessory_check <- accessory %>% 
+  select(mm_key, AccyType, DateValued) %>% 
+  group_by(mm_key, DateValued) %>% 
+  dummy_cols(select_columns = "AccyType") %>%
+  select(-AccyType) 
+## Katt needs to group by mm_key, sum the rows, merge it
+# and check for duplicates 
+
 ```
 
 ```{r sales}
@@ -339,13 +350,17 @@ cleaned_env = bind_rows(d)
 View(distinct(resBldg, mm_key))
 View(distinct(df, AccyType))
 
-df <- sales %>%
+final_df <- sales %>%
   left_join(resBldg, by="mm_key") %>%
   group_by(mm_key, DocumentDate) %>%
   filter(DocumentDate >= YrBuilt) %>%
   filter(YrBuilt == max(YrBuilt))
 
 
+test <- final_df %>%
+  left_join(accessory, by="mm_key") %>% 
+  group_by(mm_kry, DocumentDate) %>% 
+  
   # left_join(accessory, by="mm_key") %>%
   # left_join(homeexe, by="mm_key") %>%
 
@@ -375,14 +390,14 @@ write.csv(df, "sales.csv", row.names = FALSE)
 # This code needs variables to be renamed and cleaned
 # Should use the merged dataset
 
-sales <- left_join(sales, homeexe, by="mm_key")
-sales_small <- sales[c("mm_key", "DocumentDate", "ValueDate")]
-sales_small$ValueDate <- as.integer(sales_small$ValueDate)
-sales_small$DocumentDate <- as.integer(format(sales_small$DocumentDate,"%Y"))
+# sales <- left_join(sales, homeexe, by="mm_key")
+# sales_small <- sales[c("mm_key", "DocumentDate", "ValueDate")]
+# sales_small$ValueDate <- as.integer(sales_small$ValueDate)
+# sales_small$DocumentDate <- as.integer(format(sales_small$DocumentDate,"%Y"))
 
 # If valuedate is less than Documentdate, keep it
 # If valuedate is greater than DocumentDate, NA
-sales_test <- sales_small %>%
+df <- df %>%
   mutate(HIExemptId = ifelse(ValueDate <= as.numeric(DocumentDate), HIExemptId, NA),
          NoteId     = ifelse(ValueDate <= as.numeric(DocumentDate), NoteId, NA),
          HomeImpVal = ifelse(ValueDate <= as.numeric(DocumentDate), HomeImpVal, NA),
