@@ -36,12 +36,14 @@ raw_sales <- read.csv("./data/EXTR_RPSale.csv")
 sales_clean <- raw_sales %>% 
   filter(PropertyType %in% c(10, 11, 12, 13, 14, 18, 19, 2, 3, 6)) %>% 
   filter(PrincipalUse == 6) %>% 
-  # mutate(DocumentDate = as.numeric(substr(DocumentDate, 7, 10))) 
-  mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
+  mutate(DocumentDate = as.numeric(substr(DocumentDate, 7, 10)))
+  # mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
 
 
-sales <- sales_clean %>% 
-  filter(DocumentDate >= "2012-01-01")
+# sales <- sales_clean %>% 
+#   filter(DocumentDate >= "2012-01-01")
+sales <- sales_clean %>%
+  filter(DocumentDate >= 2012)
   
 
   # not including mobile homes, check 6 
@@ -338,14 +340,31 @@ View(distinct(resBldg, mm_key))
 View(distinct(df, AccyType))
 
 df <- sales %>%
+  left_join(resBldg, by="mm_key") %>%
+  group_by(mm_key, DocumentDate) %>%
+  filter(DocumentDate >= YrBuilt) %>%
+  filter(YrBuilt == max(YrBuilt))
+
+
   # left_join(accessory, by="mm_key") %>%
   # left_join(homeexe, by="mm_key") %>%
-  left_join(resBldg, by="mm_key")
+
   # left_join(parcel, by="mm_key") %>%
   # left_join(c_units, by="mm_key")
   
   # left_join(valhist, by="mm_key") %>%
   # left_join(env, by="mm_key") %>%
+resBldg %>%
+  group_by(mm_key) %>% 
+  add_count(mm_key) %>%
+  filter(n()>1)
+
+test <- df %>% 
+  group_by(mm_key) %>% 
+  add_count(mm_key) %>%
+  filter(n()>1) %>%
+  group_by(YrBuilt) %>% 
+  filter(n()>1)
 
 write.csv(df, "sales.csv", row.names = FALSE)
 ```
