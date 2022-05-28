@@ -1,0 +1,415 @@
+---
+title: "Real Estate Analysis"
+author: "Group 4"
+date: '2022-05-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+library(tidyverse)
+library(stringr)
+library(fastDummies)
+```
+
+```{r accesory}
+accessory <- read.csv("./data/EXTR_Accessory_V.csv")
+
+accessory <- accessory %>% 
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+  select(-c(Major, Minor, AccyDescr, UpdatedBy, UpdateDate)) %>% 
+  mutate(DateValued = substr(DateValued, 1, 4))
+
+accessory <- accessory %>% 
+  filter(Size >= 0)
+
+accessory$AccyType <- as.factor(accessory$AccyType)
+
+##### Dummy Variable & Filtering ########
+
+accessory <- accessory %>% 
+  select(mm_key, AccyType, DateValued) %>% 
+  group_by(mm_key, DateValued) %>% 
+  dummy_cols(select_columns = "AccyType") %>%
+  select(-AccyType) %>% 
+  group_by(mm_key, DateValued) %>% 
+  summarise(across(where(is.numeric), sum)) %>% 
+  filter(DateValued != "1900")
+```
+
+```{r sales}
+# Data Wrangling 
+raw_sales <- read.csv("./data/EXTR_RPSale.csv")
+
+#change document date to year/date format 
+# remove non-residential buildings
+sales_clean <- raw_sales %>% 
+  filter(PropertyType %in% c(10, 11, 12, 13, 14, 18, 19, 2, 3, 6)) %>% 
+  filter(PrincipalUse == 6) %>% 
+  mutate(DocumentDate = as.numeric(substr(DocumentDate, 7, 10)))
+  # mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
+
+
+# sales <- sales_clean %>% 
+#   filter(DocumentDate >= "2012-01-01")
+sales <- sales_clean %>%
+  filter(DocumentDate >= 2012)
+  
+
+  # not including mobile homes, check 6 
+
+# Combines Major and Minor columns
+combineID <- function(df) {
+  df %>% 
+    mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+    select(-c(Major, Minor))
+}
+
+sales <- combineID(sales)
+# test <- sales %>% filter(str_detect(AFForestLand, 'Y'))
+
+# removing useless information
+sales <- sales %>%
+  select(c(mm_key, DocumentDate, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
+sales$PropertyType <- as.factor(sales$PropertyType)
+sales$PrincipalUse <- as.factor(sales$PrincipalUse)
+sales$SaleInstrument <- as.factor(sales$SaleInstrument)
+sales$SaleReason <- as.factor(sales$SaleReason)
+sales$PropertyClass <- as.factor(sales$PropertyClass)
+
+# sales %>% distinct(AFNonProfitUse)
+# test <- sales %>% 
+#   group_by(mm_key) %>%
+#   count()
+
+# replace Y,y,N,n,0,1 and NULL values with binary 0's and 1's
+lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+sales$AFCurrentUseLand <- lookup[sales$AFCurrentUseLand]
+sales$AFCurrentUseLand[is.na(sales$AFCurrentUseLand)] = 0
+
+sales$AFForestLand <- lookup[sales$AFForestLand]
+sales$AFForestLand[is.na(sales$AFForestLand)] = 0
+
+sales$AFHistoricProperty <- lookup[sales$AFHistoricProperty]
+sales$AFHistoricProperty[is.na(sales$AFHistoricProperty)] = 0
+
+sales$AFNonProfitUse <-lookup[sales$AFNonProfitUse]
+sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0
+# 
+# nrow(test)
+# nrow(sales)
+
+```
+
+```{r permits}
+# clean EXTR_HomeImpExempts.csv
+# combine major and minor key
+# delete columns BldgNbr, FirstBillYr, LastBillYr, ValuedBy, UpdatedBy, UpdateDate
+# remove rows with 0 improvement value
+# factor data
+
+homeexe <- read.csv('./data/EXTR_HomeImpExempts.csv')
+
+homeexe <- homeexe %>%
+  mutate(mm_key = paste0(Major, '-', Minor), ValueDate = substr(ValueDate, 1, 4), .before = 1) %>%
+  select(-c(Major, Minor, BldgNbr, FirstBillYr, LastBillYr, ValuedBy, UpdatedBy, UpdateDate))
+
+# filter those with an actual improvement value
+homeexe <- homeexe %>%
+  filter(HomeImpVal > 0)
+
+# factor the data
+homeexe$HIExemptId = as.factor(homeexe$HIExemptId)
+homeexe$NoteId = as.factor(homeexe$NoteId)
+```
+
+```{r valuehist}
+# clean EXTR_ValueHistory_V.csv
+# combine major and minor
+# factor data
+
+valhist <- read.csv('./data/EXTR_ValueHistory_V.csv')
+
+valhist <- valhist %>%
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%
+  select(-c(Major, Minor, OmitYr, ApprLandVal, ApprImpsVal, ApprImpIncr, TaxValReason, TaxStatus, ChangeDate, ChangeDocId, Reason, SplitCode))
+
+# filter those that are prior to 2012
+valhist <- valhist %>%
+  filter(TaxYr > 2012)
+
+# factor data
+valhist$LevyCode = as.factor(valhist$LevyCode)
+```
+
+```{r residential}
+resBldg <- read.csv("./data/EXTR_ResBldg.csv")
+resBldg <- combineID(resBldg)
+
+# removing useless
+resBldg <- resBldg %>%
+  select( -c(Address, BuildingNumber, Fraction, DirectionPrefix, StreetName, StreetType, DirectionSuffix, ))
+resBldg$BldgGrade <- as.factor(resBldg$BldgGrade)
+resBldg$FinBasementGrade <-
+  as.factor(resBldg$FinBasementGrade)
+resBldg$DaylightBasement <-
+  as.factor(resBldg$DaylightBasement) 
+resBldg$HeatSystem <- as.factor(resBldg$HeatSystem)
+resBldg$HeatSource <- as.factor(resBldg$HeatSource)
+resBldg <- resBldg %>% 
+  mutate(DaylightBasement = ifelse(tolower(DaylightBasement) == "y", 1, 0)) %>%
+  mutate(ViewUtilization = ifelse(tolower(ViewUtilization) == "y", 1, 0))
+
+resBldg %>% distinct(ViewUtilization)
+str(resBldg)
+```
+
+
+
+```{r parcel}
+parcel <- read.csv("./data/EXTR_Parcel.csv")
+
+parcel_red <- parcel %>% 
+  select(-c(PropName, PlatName, PlatLot, SpecArea, SpecSubArea))  #plat lot ?? check 
+
+rm(parcel)
+
+parcel_red$Area <- as.factor(parcel_red$Area)
+
+parcel_red$SubArea <- as.factor(parcel_red$SubArea)
+
+parcel_red$HBUAsIfVacant <- as.factor(parcel_red$HBUAsIfVacant)
+
+parcel_red$HBUAsImproved <- as.factor(parcel_red$HBUAsImproved)
+
+parcel_red[, 18:24] <- lapply(parcel_red[, 18:24], function(y) {as.factor(y)})
+
+parcel_red <- parcel_red %>% 
+  mutate(Unbuildable = ifelse(Unbuildable == "True", 1, 0))
+
+parcel_red[, 27:36] <- lapply(parcel_red[, 27:36], function(y) {as.factor(y)}) 
+
+parcel_red[, 39:41] <- lapply(parcel_red[, 39:41], function(y) {as.factor(y)})
+
+parcel_red[, 44:46] <- lapply(parcel_red[, 44:46], function(y) {as.factor(y)})
+
+parcel_red$HistoricSite <- as.factor(parcel_red$HistoricSite)
+
+parcel_red$CurrentUseDesignation <- as.factor(parcel_red$CurrentUseDesignation)
+
+parcel_red[, 42:43] <- lapply(parcel_red[, 42:43], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel_red[, 48:49] <- lapply(parcel_red[, 48:49], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel_red[, 74:75] <- lapply(parcel_red[, 74:75], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel_half <- parcel_red %>% 
+  select(NbrBldgSites:OtherProblems)
+
+parcel_red <- parcel_red %>% 
+  select(Major:OtherNuisances)
+
+parcel_half[, 3:5] <- lapply(parcel_half[, 3:5], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+parcel_half[, 8:27] <- lapply(parcel_half[, 8:27], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+
+# rm(ls(parcel_half, parcel_red))
+
+parcel <- cbind(parcel_red, parcel_half)
+
+parcel <- parcel %>% 
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+  select(-c(Major, Minor))
+```
+
+```{r}
+# importing stuff
+condo_complex = read_csv("data/EXTR_CondoComplex.csv")
+condo_units = read_csv("data/EXTR_CondoUnit2.csv")
+env_restrict = read_csv("data/EXTR_EnvironmentalRestriction_V.csv")
+```
+
+```{r}
+#Function to Sort Y/N
+library(glue)
+y = data.frame()
+test = function(d,c1,...){
+colname = c(c1,...) 
+print(colname)
+print(length(colname))
+for(i in seq_along(colname)){
+    x = colname[i]
+    print(x)
+    print(class(x))
+    lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+    factor_cols <- c(x)
+    d[, factor_cols] = lookup[d[,factor_cols]]
+    
+    
+}
+ return(d)
+}
+
+```
+
+```{r}
+#Condo Units Data Set
+
+cu_df = data.frame(condo_units)
+cleaned_condo_units = cu_df %>%
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%  #Creating mm_key
+  select(-c(Major, Minor)) %>%
+  select(-c(BldgNbr, UnitNbr,MHomeDescr,PersPropAcctNbr,Address,BuildingNumber,Fraction,DirectionPrefix,StreetName,DirectionSuffix,UnitDescr,ZipCode)) #Removing Non relevant Vars
+
+#Splitting
+chunk <- 10000
+n <- nrow(cleaned_condo_units)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_condo_units, r)
+
+#Applying Factors 
+d <- lapply(d, function(x){
+  x$UnitType = as.factor(x$UnitType)
+  x$UnitQuality = as.factor(x$UnitQuality) 
+  x$UnitLoc = as.factor(x$UnitLoc)
+  x$UnitOfMeasure = as.factor(x$UnitOfMeasure)
+  x$Condition = as.factor(x$Condition)
+  x$OtherRoom = as.factor(x$OtherRoom) 
+  x$ViewMountain = as.factor(x$ViewMountain)
+ x$ViewLakeRiver = as.factor(x$ViewLakeRiver)
+ x$ViewCityTerritorial = as.factor(x$ViewCityTerritorial)
+ x$ViewPugetSound = as.factor(x$ViewPugetSound)
+ x$ViewLakeWaSamm = as.factor(x$ViewLakeWaSamm)
+ x$PkgOpen = as.factor(x$PkgOpen)
+ x$PkgCarport = as.factor(x$PkgCarport)
+ x$PkgBasement = as.factor(x$PkgBasement)
+ x$PkgBasementTandem = as.factor(x$PkgBasementTandem)
+ x$PkgGarage = as.factor(x$PkgGarage)
+ x$PkgGarageTandem = as.factor(x$PkgGarageTandem)
+ x$PkgOtherType = as.factor(x$PkgOtherType)
+ x$Grade = as.factor(x$Grade)
+  return(x)
+})
+
+cleaned_condo_units %>%
+  group_by(mm_key) %>%
+count(mm_key) %>%
+filter(n >1)
+
+
+
+#Merging Data Partitions
+cleaned_condo_units = bind_rows(d)
+c_units = test(cleaned_condo_units, "TopFloor", "Fireplace","EndUnit")
+```
+
+
+```{r}
+#Envrionmental Restrictions Data Set
+#Cleaning and Factor Type
+library(tidyverse)
+library(rlang)
+er_df = data.frame(env_restrict)
+cleaned_env = er_df %>%
+   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+select(-c(Major, Minor)) %>%
+select(mm_key,Type,DelineationStudy,PcntAffected)
+factor_cols = c("Type")
+#Splitting
+chunk <- 10000
+n <- nrow(cleaned_env)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_env, r)
+#Applying Factor 
+d <- lapply(d, function(x){
+  x$Type = as.factor(x$Type)
+  return(x)
+})
+cleaned_env = bind_rows(d)
+
+
+
+
+# library(rlang)
+  #test1 = mutate(d,"{eval(expr({{x}}))}" := ifelse((is.na("{eval(expr({{x}}))}")),NA_real_, ifelse(("{eval(expr({{x}}))}") == "y",1,0)))
+
+
+#lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+#factor_cols <- c("DelineationStudy")
+#cleaned_env[,factor_cols] <- lookup[cleaned_env[,factor_cols]]
+#cleaned_env
+
+
+ env = test(cleaned_env,"DelineationStudy")
+
+```
+
+
+```{r merge}
+View(distinct(resBldg, mm_key))
+View(distinct(df, AccyType))
+
+final_df <- sales %>%
+  filter(SalePrice > 0) %>% 
+  left_join(resBldg, by="mm_key") %>%
+  group_by(mm_key, DocumentDate) %>%
+  filter(DocumentDate >= YrBuilt) %>%
+  filter(YrBuilt == max(YrBuilt)) 
+  
+##### Accessory Issues ###########
+
+accy_join <- final_df %>%
+  left_join(accessory, by="mm_key") %>%
+  relocate(DateValued:AccyType_40, .after = DocumentDate) 
+
+accy_filter <- test %>%
+  mutate(across(starts_with("AccyType"), ~ifelse(DocumentDate < as.numeric(DateValued), NA, .x))) %>% 
+  distinct()
+
+###############################
+  
+  # left_join(accessory, by="mm_key") %>%
+  # left_join(homeexe, by="mm_key") %>%
+
+  # left_join(parcel, by="mm_key") %>%
+  # left_join(c_units, by="mm_key")
+  
+  # left_join(valhist, by="mm_key") %>%
+  # left_join(env, by="mm_key") %>%
+resBldg %>%
+  group_by(mm_key) %>% 
+  add_count(mm_key) %>%
+  filter(n()>1)
+
+test <- df %>% 
+  group_by(mm_key) %>% 
+  add_count(mm_key) %>%
+  filter(n()>1) %>%
+  group_by(YrBuilt) %>% 
+  filter(n()>1)
+
+write.csv(df, "sales.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+# This code needs variables to be renamed and cleaned
+# Should use the merged dataset
+
+# sales <- left_join(sales, homeexe, by="mm_key")
+# sales_small <- sales[c("mm_key", "DocumentDate", "ValueDate")]
+# sales_small$ValueDate <- as.integer(sales_small$ValueDate)
+# sales_small$DocumentDate <- as.integer(format(sales_small$DocumentDate,"%Y"))
+
+# If valuedate is less than Documentdate, keep it
+# If valuedate is greater than DocumentDate, NA
+df <- df %>%
+  mutate(HIExemptId = ifelse(ValueDate <= as.numeric(DocumentDate), HIExemptId, NA),
+         NoteId     = ifelse(ValueDate <= as.numeric(DocumentDate), NoteId, NA),
+         HomeImpVal = ifelse(ValueDate <= as.numeric(DocumentDate), HomeImpVal, NA),
+         ValueDate = ifelse(ValueDate <= as.numeric(DocumentDate), ValueDate, NA))
+```
