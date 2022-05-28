@@ -101,46 +101,6 @@ sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0
 
 ```
 
-```{r permits}
-# clean EXTR_HomeImpExempts.csv
-# combine major and minor key
-# delete columns BldgNbr, FirstBillYr, LastBillYr, ValuedBy, UpdatedBy, UpdateDate
-# remove rows with 0 improvement value
-# factor data
-
-homeexe <- read.csv('./data/EXTR_HomeImpExempts.csv')
-
-homeexe <- homeexe %>%
-  mutate(mm_key = paste0(Major, '-', Minor), ValueDate = substr(ValueDate, 1, 4), .before = 1) %>%
-  select(-c(Major, Minor, BldgNbr, FirstBillYr, LastBillYr, ValuedBy, UpdatedBy, UpdateDate))
-
-# filter those with an actual improvement value
-homeexe <- homeexe %>%
-  filter(HomeImpVal > 0)
-
-# factor the data
-homeexe$HIExemptId = as.factor(homeexe$HIExemptId)
-homeexe$NoteId = as.factor(homeexe$NoteId)
-```
-
-```{r valuehist}
-# clean EXTR_ValueHistory_V.csv
-# combine major and minor
-# factor data
-
-valhist <- read.csv('./data/EXTR_ValueHistory_V.csv')
-
-valhist <- valhist %>%
-  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%
-  select(-c(Major, Minor, OmitYr, ApprLandVal, ApprImpsVal, ApprImpIncr, TaxValReason, TaxStatus, ChangeDate, ChangeDocId, Reason, SplitCode))
-
-# filter those that are prior to 2012
-valhist <- valhist %>%
-  filter(TaxYr > 2012)
-
-# factor data
-valhist$LevyCode = as.factor(valhist$LevyCode)
-```
 
 ```{r residential}
 resBldg <- read.csv("./data/EXTR_ResBldg.csv")
@@ -304,45 +264,6 @@ c_units = test(cleaned_condo_units, "TopFloor", "Fireplace","EndUnit")
 ```
 
 
-```{r}
-#Envrionmental Restrictions Data Set
-#Cleaning and Factor Type
-library(tidyverse)
-library(rlang)
-er_df = data.frame(env_restrict)
-cleaned_env = er_df %>%
-   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
-select(-c(Major, Minor)) %>%
-select(mm_key,Type,DelineationStudy,PcntAffected)
-factor_cols = c("Type")
-#Splitting
-chunk <- 10000
-n <- nrow(cleaned_env)
-r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
-d <- split(cleaned_env, r)
-#Applying Factor 
-d <- lapply(d, function(x){
-  x$Type = as.factor(x$Type)
-  return(x)
-})
-cleaned_env = bind_rows(d)
-
-
-
-
-# library(rlang)
-  #test1 = mutate(d,"{eval(expr({{x}}))}" := ifelse((is.na("{eval(expr({{x}}))}")),NA_real_, ifelse(("{eval(expr({{x}}))}") == "y",1,0)))
-
-
-#lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
-#factor_cols <- c("DelineationStudy")
-#cleaned_env[,factor_cols] <- lookup[cleaned_env[,factor_cols]]
-#cleaned_env
-
-
- env = test(cleaned_env,"DelineationStudy")
-
-```
 
 
 ```{r merge}
@@ -414,24 +335,33 @@ sapply(final_df, function(x) sum(x == 0))
 unique(final_df$ZipCode)
 ```
 
-```{r}
-unique(final_df$Obsolescence)
-```
 
-```{r}
-# This code needs variables to be renamed and cleaned
-# Should use the merged dataset
+```{r joinAccessory}
+# Join sales and accessory
 
-# sales <- left_join(sales, homeexe, by="mm_key")
-# sales_small <- sales[c("mm_key", "DocumentDate", "ValueDate")]
-# sales_small$ValueDate <- as.integer(sales_small$ValueDate)
-# sales_small$DocumentDate <- as.integer(format(sales_small$DocumentDate,"%Y"))
+# Selecting cols to easily see the join result
+col = c("mm_key", "DocumentDate", "DateValued","AccyType_1","AccyType_2","AccyType_3", "AccyType_6", "AccyType_7","AccyType_8","AccyType_12", "AccyType_13", "AccyType_14","AccyType_15" ,"AccyType_16", "AccyType_17", "AccyType_18","AccyType_19","AccyType_20","AccyType_21","AccyType_22","AccyType_23", "AccyType_24","AccyType_25","AccyType_26","AccyType_27","AccyType_28", "AccyType_29","AccyType_30",        "AccyType_31","AccyType_32","AccyType_33","AccyType_34", "AccyType_35","AccyType_36",  "AccyType_37" , "AccyType_38", "AccyType_39","AccyType_40")
 
-# If valuedate is less than Documentdate, keep it
-# If valuedate is greater than DocumentDate, NA
-df <- df %>%
-  mutate(HIExemptId = ifelse(ValueDate <= as.numeric(DocumentDate), HIExemptId, NA),
-         NoteId     = ifelse(ValueDate <= as.numeric(DocumentDate), NoteId, NA),
-         HomeImpVal = ifelse(ValueDate <= as.numeric(DocumentDate), HomeImpVal, NA),
-         ValueDate = ifelse(ValueDate <= as.numeric(DocumentDate), ValueDate, NA))
+acc_df <- left_join(final_df, accessory)
+acc_df <- acc_df %>%
+  select(col)
+
+# Keep records for houses that either have no record of accessory or accessory's date value was before 
+# the sale of the house
+acc_df <- acc_df %>%
+  filter(is.na(DateValued) | (DateValued <= DocumentDate))
+
+# If there were multiple changes between sales, only keep the most recent one
+acc_df <- acc_df %>%
+  group_by(mm_key, DocumentDate) %>%
+  filter(is.na(DateValued) | (DateValued == max(DateValued))) %>% 
+  distinct()
+  
+# Check for duplicates
+acc_df %>%
+  group_by(mm_key, DocumentDate) %>%
+  filter(n() > 1) %>%
+  arrange(mm_key)
+
+# Please double check if the number of observations is correct
 ```
