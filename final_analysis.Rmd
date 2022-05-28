@@ -348,20 +348,21 @@ acc_df <- acc_df %>%
 
 # Keep records for houses that either have no record of accessory or accessory's date value was before 
 # the sale of the house
-acc_df <- acc_df %>%
+acc_df2 <- acc_df %>%
   filter(is.na(DateValued) | (DateValued <= DocumentDate))
 
 # If there were multiple changes between sales, only keep the most recent one
-acc_df <- acc_df %>%
+acc_df2 <- acc_df2 %>%
   group_by(mm_key, DocumentDate) %>%
   filter(is.na(DateValued) | (DateValued == max(DateValued))) %>% 
   distinct()
   
 # Check for duplicates
-acc_df %>%
-  group_by(mm_key, DocumentDate) %>%
+acc_df2 %>%
+  group_by(mm_key) %>%
   filter(n() > 1) %>%
   arrange(mm_key)
 
 # Please double check if the number of observations is correct
+diff <- setdiff(acc_df,acc_df2)
 ```
