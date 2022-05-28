@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(stringr)
 library(fastDummies)
+library(glmnet)
 ```
 
 ```{r accesory}
@@ -185,13 +186,6 @@ parcel <- parcel %>%
 ```
 
 ```{r}
-# importing stuff
-condo_complex = read_csv("data/EXTR_CondoComplex.csv")
-condo_units = read_csv("data/EXTR_CondoUnit2.csv")
-env_restrict = read_csv("data/EXTR_EnvironmentalRestriction_V.csv")
-```
-
-```{r}
 #Function to Sort Y/N
 library(glue)
 y = data.frame()
@@ -214,8 +208,9 @@ for(i in seq_along(colname)){
 
 ```
 
-```{r}
+```{r condo}
 #Condo Units Data Set
+condo_units = read.csv("data/EXTR_CondoUnit2.csv")
 
 cu_df = data.frame(condo_units)
 cleaned_condo_units = cu_df %>%
@@ -287,29 +282,29 @@ final_df <- sales %>%
 #   filter(DocumentDate >= DateValued) 
 #   
   
-  group_by(mm_kry, DocumentDate) %>% 
-  
-  # left_join(accessory, by="mm_key") %>%
-  # left_join(homeexe, by="mm_key") %>%
-
-  # left_join(parcel, by="mm_key") %>%
-  # left_join(c_units, by="mm_key")
-  
-  # left_join(valhist, by="mm_key") %>%
-  # left_join(env, by="mm_key") %>%
-resBldg %>%
-  group_by(mm_key) %>% 
-  add_count(mm_key) %>%
-  filter(n()>1)
-
-test <- df %>% 
-  group_by(mm_key) %>% 
-  add_count(mm_key) %>%
-  filter(n()>1) %>%
-  group_by(YrBuilt) %>% 
-  filter(n()>1)
-
-write.csv(df, "sales.csv", row.names = FALSE)
+#   group_by(mm_kry, DocumentDate) %>% 
+#   
+#   # left_join(accessory, by="mm_key") %>%
+#   # left_join(homeexe, by="mm_key") %>%
+# 
+#   # left_join(parcel, by="mm_key") %>%
+#   # left_join(c_units, by="mm_key")
+#   
+#   # left_join(valhist, by="mm_key") %>%
+#   # left_join(env, by="mm_key") %>%
+# resBldg %>%
+#   group_by(mm_key) %>% 
+#   add_count(mm_key) %>%
+#   filter(n()>1)
+# 
+# test <- df %>% 
+#   group_by(mm_key) %>% 
+#   add_count(mm_key) %>%
+#   filter(n()>1) %>%
+#   group_by(YrBuilt) %>% 
+#   filter(n()>1)
+# 
+# write.csv(df, "sales.csv", row.names = FALSE)
 ```
 
 
@@ -344,9 +339,11 @@ unique(final_df$ZipCode)
 # Selecting cols to easily see the join result
 col = c("mm_key", "DocumentDate", "DateValued","AccyType_1","AccyType_2","AccyType_3", "AccyType_6", "AccyType_7","AccyType_8","AccyType_12", "AccyType_13", "AccyType_14","AccyType_15" ,"AccyType_16", "AccyType_17", "AccyType_18","AccyType_19","AccyType_20","AccyType_21","AccyType_22","AccyType_23", "AccyType_24","AccyType_25","AccyType_26","AccyType_27","AccyType_28", "AccyType_29","AccyType_30",        "AccyType_31","AccyType_32","AccyType_33","AccyType_34", "AccyType_35","AccyType_36",  "AccyType_37" , "AccyType_38", "AccyType_39","AccyType_40")
 
+col2 = c("DateValued","AccyType_1","AccyType_2","AccyType_3", "AccyType_6", "AccyType_7","AccyType_8","AccyType_12", "AccyType_13", "AccyType_14","AccyType_15" ,"AccyType_16", "AccyType_17", "AccyType_18","AccyType_19","AccyType_20","AccyType_21","AccyType_22","AccyType_23", "AccyType_24","AccyType_25","AccyType_26","AccyType_27","AccyType_28", "AccyType_29","AccyType_30",        "AccyType_31","AccyType_32","AccyType_33","AccyType_34", "AccyType_35","AccyType_36",  "AccyType_37" , "AccyType_38", "AccyType_39","AccyType_40")
+
 acc_df <- left_join(final_df, accessory)
-acc_df <- acc_df %>%
-  select(col)
+# acc_df <- acc_df %>%
+#   select(col)
 
 # Keep records for houses that either have no record of accessory or accessory's date value was before 
 # the sale of the house
@@ -376,6 +373,48 @@ acc_df3 %>%
   filter(n() > 1) %>%
   arrange(mm_key)
 
+acc_df4 <- acc_df3 %>%
+  select(-col2)
+
 # Please double check if the number of observations is correct
-diff <- setdiff(acc_df,acc_df2)
+diff <- setdiff(acc_df4,final_df)
+final_df[ !(final_df$mm_key %in% acc_df4$mm_key), ]
+```
+
+
+```{r LASSO}
+# LASSO and OLS
+
+# Store model name, RMSE, and cross validated R2 as dataframe
+result <- data.frame(Model=character(),
+                 RMSE=double(), 
+                 CVR2=double(), 
+                 stringsAsFactors=FALSE) 
+
+# Split test and train data
+test_index <- sample(1:nrow(acc_df4), as.integer(nrow(acc_df4)*0.2))
+train_set <- acc_df3[-test_index,]
+test_set <- acc_df3[test_index,]
+
+# Convert to matrix
+train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
+train_y <- train_set$SalePrice
+
+test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
+test_y <- test_set$SalePrice
+
+# Fit LASSO and predict
+lasso.fit <- cv.glmnet(train_x, train_y, family = "gaussian", alpha = 1, k = 5)
+pred <- predict(lasso.fit, test_x, s = "lambda.min", type = "response")
+
+# Get test errors and store results
+lasso.RMSE <- sqrt(mean((pred - test_set$SalePrice)^2))
+lasso.R2 <- lasso.fit$glmnet.fit$dev.ratio[which(lasso.fit$glmnet.fit$lambda == lasso.fit$lambda.min)]
+
+result <- unique(rbind(result, data.frame(Model=c("LASSO + OLS"),
+                                          RMSE = c(lasso.RMSE),
+                                          CVR2=c(lasso.R2))))
+
+# print coefficients
+coef(lasso.fit, s = "lambda.min")
 ```
