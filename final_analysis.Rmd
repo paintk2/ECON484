@@ -35,6 +35,8 @@ accessory <- accessory %>%
   select(-AccyType) %>% 
   group_by(mm_key, DateValued) %>% 
   summarise(across(where(is.numeric), sum))
+
+accessory$DateValued <- as.integer(accessory$DateValued)
 ```
 
 ```{r sales}
@@ -348,17 +350,28 @@ acc_df <- acc_df %>%
 
 # Keep records for houses that either have no record of accessory or accessory's date value was before 
 # the sale of the house
+# If there is one obs for a mm_key 12345-12345 with sales year 2012 value date 2015, this obs is removed
 acc_df2 <- acc_df %>%
-  filter(is.na(DateValued) | (DateValued <= DocumentDate))
+  group_by(mm_key, DocumentDate) %>%
+  mutate(DateValued = ifelse(DateValued <= DocumentDate, DateValued, NA))%>% 
+  distinct()
+
+acc_df2 <- acc_df2 %>%
+  mutate(DateValued = ifelse(is.na(DateValued), 0, DateValued))
 
 # If there were multiple changes between sales, only keep the most recent one
-acc_df2 <- acc_df2 %>%
+acc_df3 <- acc_df2 %>%
   group_by(mm_key, DocumentDate) %>%
-  filter(is.na(DateValued) | (DateValued == max(DateValued))) %>% 
+  filter((DateValued == max(DateValued) | is.na(DateValued))) %>% 
   distinct()
   
 # Check for duplicates
 acc_df2 %>%
+  group_by(mm_key) %>%
+  filter(n() > 1) %>%
+  arrange(mm_key)
+
+acc_df3 %>%
   group_by(mm_key) %>%
   filter(n() > 1) %>%
   arrange(mm_key)
