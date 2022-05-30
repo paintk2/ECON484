@@ -14,6 +14,7 @@ library(tidyverse)
 library(stringr)
 library(fastDummies)
 library(glmnet)
+library(glue)
 ```
 
 ```{r accesory}
@@ -123,7 +124,6 @@ resBldg <- resBldg %>%
   mutate(DaylightBasement = ifelse(tolower(DaylightBasement) == "y", 1, 0)) %>%
   mutate(ViewUtilization = ifelse(tolower(ViewUtilization) == "y", 1, 0))
 
-resBldg %>% distinct(ViewUtilization)
 str(resBldg)
 ```
 
@@ -187,7 +187,6 @@ parcel <- parcel %>%
 
 ```{r}
 #Function to Sort Y/N
-library(glue)
 y = data.frame()
 test = function(d,c1,...){
 colname = c(c1,...) 
@@ -247,13 +246,6 @@ d <- lapply(d, function(x){
  x$Grade = as.factor(x$Grade)
   return(x)
 })
-
-cleaned_condo_units %>%
-  group_by(mm_key) %>%
-count(mm_key) %>%
-filter(n >1)
-
-
 
 #Merging Data Partitions
 cleaned_condo_units = bind_rows(d)
@@ -383,7 +375,8 @@ final_df[ !(final_df$mm_key %in% acc_df4$mm_key), ]
 
 
 ```{r LASSO}
-# LASSO and OLS
+# LASSO model selection and LASSO regression
+# The resulting coefficients will be biased towards 0!
 
 # Store model name, RMSE, and cross validated R2 as dataframe
 result <- data.frame(Model=character(),
