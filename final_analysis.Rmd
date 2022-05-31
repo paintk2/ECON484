@@ -264,7 +264,30 @@ final_df <- sales %>%
   left_join(resBldg, by="mm_key") %>%
   group_by(mm_key, DocumentDate) %>%
   filter(DocumentDate >= YrBuilt) %>%
-  filter(YrBuilt == max(YrBuilt)) 
+  filter(YrBuilt == max(YrBuilt))
+  # 311526 obs.
+  
+final_df <- final_df %>%
+  left_join(parcel, by="mm_key") %>%
+  # 311526 obs.
+  left_join(c_units, by="mm_key")
+  # 311526 obs.
+
+save(final_df, file="sales.Rda")
+
+
+# # Tests to see if there are duplicate mm_keys that do NOT
+# # have distinct sale dates
+# test <- final_df %>%
+#   group_by(mm_key) %>%
+#   filter(n() > 1) %>%
+#   ungroup
+# test2 <- test %>%
+#   group_by(DocumentDate) %>%
+#   filter(n() > 1) %>%
+#   ungroup
+
+  
   
 # test <- final_df %>%
 #   left_join(accessory, by="mm_key") %>% 
@@ -296,7 +319,7 @@ final_df <- sales %>%
 #   group_by(YrBuilt) %>% 
 #   filter(n()>1)
 # 
-# write.csv(df, "sales.csv", row.names = FALSE)
+# write.csv(final_df, "sales.csv", row.names = FALSE)
 ```
 
 
