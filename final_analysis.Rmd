@@ -368,8 +368,8 @@ acc_df2 <- acc_df %>%
   mutate(DateValued = ifelse(DateValued <= DocumentDate, DateValued, NA))%>% 
   distinct()
 
-acc_df2 <- acc_df2 %>%
-  mutate(DateValued = ifelse(is.na(DateValued), 0, DateValued))
+# acc_df2 <- acc_df2 %>%
+#   mutate(DateValued = ifelse(is.na(DateValued), 0, DateValued))
 
 # If there were multiple changes between sales, only keep the most recent one
 acc_df3 <- acc_df2 %>%
