@@ -481,3 +481,79 @@ eval_results(train_y, ridge.pred.train, train_set)
 eval_results(test_y, ridge.pred.test, test_set)
 
 ```
+
+```{r DoubleLasso}
+#Double LASSO
+
+# Step 1) Creating Test and Train sets:
+
+test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
+train_set <- final_df[-test_index,]
+test_set <- final_df[test_index,]
+
+train_xall <- data.matrix(train_set[,names(train_set) != "SalePrice" ])
+
+#Removing Covariates of Interest from X
+train_x = as.matrix(subset(train_xall,select = -c(SqFtTotLiving))) #We remove our Covariate of Interest
+
+train_y = train_set$SalePrice #Creating our training set for independant variable
+
+test_xall <- data.matrix(test_set[,names(train_set) != "SalePrice" ])
+
+#Removing Covariates of Interest from X
+test_x = as.matrix(subset(test_xall,select = -c(SqFtTotLiving)))
+
+test_y <- test_set$SalePrice #setting our independent variable to log y 
+
+#Creating Covariates Set
+covariates_train = as.vector(subset(train_xall,select = c(SqFtTotLiving)))
+covariates_test = as.vector(subset(test_xall,select = c(SqFtTotLiving)))
+
+#Step 2 Selecting variables that predict outcome:
+library(glmnet)
+n=nrow(train_x) 
+p=ncol(train_x) 
+sd1=sd(covariates_train)
+lambda1 = .5*sd1*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+summary(lambda1) 
+k = 1 
+while(k < 15){ 
+  fitY = glmnet(train_x,as.vector(covariates_train), lambda=lambda1) 
+  ba = coef(fitY, s = lambda1) 
+  ea = predict(fitY,test_x) 
+  sda = sd(ea) 
+  lambda1 = sda*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+  k = k+1 
+} 
+ba 
+
+# Step 3: Select variables that predict treatment 
+
+n=nrow(train_x) 
+p=ncol(train_x)
+t = ncol(test_x)
+sd1=sd(train_y) 
+lambda1 = .5*sd1*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p))   
+summary(lambda1) 
+k = 1 
+while(k < 15){ 
+  fitT = glmnet(train_x, train_y, lambda=lambda1) 
+  ba = coef(fitT, s = lambda1) 
+  ea = predict(fitT,test_x ) 
+  sda = sd(ea) 
+  lambda1 = sda*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+  k = k+1 
+} 
+ba 
+
+#STEP 3: linear regression with both sets of variables 
+
+use = union(which(abs(fitY$beta)>0),which(abs(fitT$beta) > 0)) 
+X = cbind(covariates_test,test_x)
+use = c(1,use+1)
+fitr <- lm(test_y~ X[,use], data=final_df) 
+summary(fitr) # show results Coeff est of "covariates test" shows the magnitude of the causal relationship
+
+```
+
+
