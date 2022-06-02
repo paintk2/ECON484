@@ -351,53 +351,49 @@ unique(final_df$ZipCode)
 ```{r joinAccessory}
 # Join sales and accessory
 
-# Selecting cols to easily see the join result
-col = c("mm_key", "DocumentDate", "DateValued","AccyType_1","AccyType_2","AccyType_3", "AccyType_6", "AccyType_7","AccyType_8","AccyType_12", "AccyType_13", "AccyType_14","AccyType_15" ,"AccyType_16", "AccyType_17", "AccyType_18","AccyType_19","AccyType_20","AccyType_21","AccyType_22","AccyType_23", "AccyType_24","AccyType_25","AccyType_26","AccyType_27","AccyType_28", "AccyType_29","AccyType_30",        "AccyType_31","AccyType_32","AccyType_33","AccyType_34", "AccyType_35","AccyType_36",  "AccyType_37" , "AccyType_38", "AccyType_39","AccyType_40")
-
-col2 = c("DateValued","AccyType_1","AccyType_2","AccyType_3", "AccyType_6", "AccyType_7","AccyType_8","AccyType_12", "AccyType_13", "AccyType_14","AccyType_15" ,"AccyType_16", "AccyType_17", "AccyType_18","AccyType_19","AccyType_20","AccyType_21","AccyType_22","AccyType_23", "AccyType_24","AccyType_25","AccyType_26","AccyType_27","AccyType_28", "AccyType_29","AccyType_30",        "AccyType_31","AccyType_32","AccyType_33","AccyType_34", "AccyType_35","AccyType_36",  "AccyType_37" , "AccyType_38", "AccyType_39","AccyType_40")
 
 acc_df <- left_join(final_df, accessory)
-# acc_df <- acc_df %>%
-#   select(col)
 
 # Keep records for houses that either have no record of accessory or accessory's date value was before 
 # the sale of the house
 # If there is one obs for a mm_key 12345-12345 with sales year 2012 value date 2015, this obs is removed
-acc_df2 <- acc_df %>%
+acc_df <- acc_df %>%
   group_by(mm_key, DocumentDate) %>%
   mutate(DateValued = ifelse(DateValued <= DocumentDate, DateValued, NA))%>% 
   distinct()
 
-# acc_df2 <- acc_df2 %>%
-#   mutate(DateValued = ifelse(is.na(DateValued), 0, DateValued))
-
 # If there were multiple changes between sales, only keep the most recent one
-acc_df3 <- acc_df2 %>%
+acc_df <- acc_df %>%
   group_by(mm_key, DocumentDate) %>%
   filter((DateValued == max(DateValued) | is.na(DateValued))) %>% 
   distinct()
   
 # Check for duplicates
-acc_df2 %>%
+acc_df %>%
   group_by(mm_key) %>%
   filter(n() > 1) %>%
   arrange(mm_key)
 
-acc_df3 %>%
+acc_df %>%
   group_by(mm_key) %>%
   filter(n() > 1) %>%
   arrange(mm_key)
-
-acc_df4 <- acc_df3 %>%
-  select(-col2)
-
-# Please double check if the number of observations is correct
-diff <- setdiff(acc_df4,final_df)
-final_df[ !(final_df$mm_key %in% acc_df4$mm_key), ]
 ```
 
 
-```{r LASSO}
+```{r test train set up}
+test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
+train_set <- final_df[-test_index,]
+test_set <- final_df[test_index,]
+
+# convert to matrix
+train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
+train_y <- train_set$SalePrice
+test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
+test_y <- test_set$SalePrice
+```
+
+```{r LASSO regression}
 # LASSO model selection and LASSO regression
 # The resulting coefficients will be biased towards 0!
 
@@ -407,21 +403,28 @@ result <- data.frame(Model=character(),
                  CVR2=double(), 
                  stringsAsFactors=FALSE) 
 
-# Split test and train data
-test_index <- sample(1:nrow(acc_df4), as.integer(nrow(acc_df4)*0.2))
-train_set <- acc_df3[-test_index,]
-test_set <- acc_df3[test_index,]
-
-# Convert to matrix
-train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
-train_y <- train_set$SalePrice
-
-test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
-test_y <- test_set$SalePrice
-
-# Fit LASSO and predict
+# Fit LASSO and do LASSO regression
 lasso.fit <- cv.glmnet(train_x, train_y, family = "gaussian", alpha = 1, k = 5)
 pred <- predict(lasso.fit, test_x, s = "lambda.min", type = "response")
+
+# Get test errors and store results
+lasso.RMSE <- sqrt(mean((pred - test_set$SalePrice)^2))
+lasso.R2 <- lasso.fit$glmnet.fit$dev.ratio[which(lasso.fit$glmnet.fit$lambda == lasso.fit$lambda.min)]
+
+result <- unique(rbind(result, data.frame(Model=c("LASSO + LASSO regression"),
+                                          RMSE = c(lasso.RMSE),
+                                          CVR2=c(lasso.R2))))
+
+# print coefficients
+coef(lasso.fit, s = "lambda.min")
+```
+
+```{r LASSO OLS}
+# LASSO model selection and OLS
+# The resulting coefficients will be biased towards 0!
+
+# Do OLS on LASSO
+pred <- predict(lasso.fit, test_x, s = 0, type = "response")
 
 # Get test errors and store results
 lasso.RMSE <- sqrt(mean((pred - test_set$SalePrice)^2))
@@ -430,19 +433,9 @@ lasso.R2 <- lasso.fit$glmnet.fit$dev.ratio[which(lasso.fit$glmnet.fit$lambda == 
 result <- unique(rbind(result, data.frame(Model=c("LASSO + OLS"),
                                           RMSE = c(lasso.RMSE),
                                           CVR2=c(lasso.R2))))
-
-# print coefficients
-coef(lasso.fit, s = "lambda.min")
 ```
-```{r Ridge Regression}
-test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
-train_set <- final_df[-test_index,]
-test_set <- final_df[test_index,]
-train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
-train_y <- train_set$SalePrice
-test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
-test_y <- test_set$SalePrice
 
+```{r Ridge Regression}
 # Fit Ridge Regression and predict
 fit <- glmnet(train_x, train_y, alpha = 0)
 plot(fit)
@@ -466,11 +459,9 @@ ridge.results <- function(true, predicted, df) {
   R_square <- 1 - SSE / SST
   RMSE = sqrt(SSE/nrow(final_df))
 # Model performance metrics
-data.frame(
-  RMSE = RMSE,
-  Rsquare = R_square
-)
-}
+result <- unique(rbind(result, data.frame(Model=c("Ridge regression"),
+                                          RMSE = c(lasso.RMSE),
+                                          CVR2=c(R_square))))
 # result for both train and test data
 ridge.results(train_y, ridge.pred.train, train_set)
 ridge.results(test_y, ridge.pred.test, test_set)
