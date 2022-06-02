@@ -438,19 +438,17 @@ coef(lasso.fit, s = "lambda.min")
 test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
 train_set <- final_df[-test_index,]
 test_set <- final_df[test_index,]
-
 train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
 train_y <- train_set$SalePrice
-
 test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
 test_y <- test_set$SalePrice
 
 # Fit Ridge Regression and predict
-lambdas <- 10^seq(-10, 2, length=100)
-fit <- glmnet(train_x, train_y, alpha = 0, lambda = lambdas)
+fit <- glmnet(train_x, train_y, alpha = 0)
 plot(fit)
+
 # find the optimal lambda
-ridge.fit <- cv.glmnet(train_x, train_y, alpha = 0, lambda = lambdas)
+ridge.fit <- cv.glmnet(train_x, train_y, alpha = 0)
 plot(ridge.fit)
 optimal_lambda <- ridge.fit$lambda.min
 optimal_lambda
@@ -458,27 +456,24 @@ optimal_lambda
 # extract all fitted models
 fit <- ridge.fit$cv.glmnet
 summary(fit)
-
-ridge.pred.train <- predict(ridge.fit, s = optional_lambda, newx = train_x)
-ridge.pred.test <- predict(ridge.fit, s = optional_lambda, newx = test_x)
+ridge.pred.train <- predict(ridge.fit, s = optimal_lambda, newx = train_x)
+ridge.pred.test <- predict(ridge.fit, s = optimal_lambda, newx = test_x)
 
 # compute R^2 from true and predicted values
 ridge.results <- function(true, predicted, df) {
-  ridge.SSE <- sum((predicted - true)^2)
-  ridge.SST <- sum((true - mean(true))^2)
+  SSE <- sum((predicted - true)^2)
+  SST <- sum((true - mean(true))^2)
   R_square <- 1 - SSE / SST
-  RMSE = sqrt(SSE/nrow(df))
-
+  RMSE = sqrt(SSE/nrow(final_df))
 # Model performance metrics
 data.frame(
   RMSE = RMSE,
   Rsquare = R_square
 )
 }
-
-# train data
-eval_results(train_y, ridge.pred.train, train_set)
-eval_results(test_y, ridge.pred.test, test_set)
+# result for both train and test data
+ridge.results(train_y, ridge.pred.train, train_set)
+ridge.results(test_y, ridge.pred.test, test_set)
 
 ```
 
