@@ -10,15 +10,17 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r packages}
-library(tidyverse)
-library(stringr)
-library(fastDummies)
-library(glmnet)
-library(glue)
-library(splines)
+library(tidyverse, quietly = T)
+library(stringr, quietly = T)
+library(fastDummies, quietly = T)
+library(glmnet, quietly = T)
+library(glue, quietly = T)
+library(splines, quietly = T)
+library(mgcv, quietly = T)
+library(caret, quietly = T)
 ```
 
-```{r accesory}
+```{r accesory, eval = FALSE}
 accessory <- read.csv("./data/EXTR_Accessory_V.csv")
 
 accessory <- accessory %>% 
@@ -186,7 +188,7 @@ parcel <- parcel %>%
   select(-c(Major, Minor))
 ```
 
-```{r}
+```{r, eval = FALSE}
 #Function to Sort Y/N
 y = data.frame()
 test = function(d,c1,...){
@@ -208,7 +210,7 @@ for(i in seq_along(colname)){
 
 ```
 
-```{r condo}
+```{r condo, eval = FALSE}
 #Condo Units Data Set
 condo_units = read.csv("data/EXTR_CondoUnit2.csv")
 
@@ -322,7 +324,7 @@ save(final_df, file="sales.Rda")
 ```
 
 
-```{r clean analysis}
+```{r clean analysis, eval = FALSE}
 # Analyzing how to clean the final data
 
 # chekcing of NA
@@ -346,7 +348,7 @@ sapply(final_df, function(x) sum(x == 0))
 unique(final_df$ZipCode)
 ```
 
-```{r joinAccessory}
+```{r joinAccessory, eval = FALSE}
 # Join sales and accessory
 
 
@@ -566,11 +568,9 @@ summary(fitr) # show results Coeff est of "covariates test" shows the magnitude 
 ```
 
 
-```{r spline}
+```{r GAM spline, eval = FALSE}
 # Generalized Additive Model using Splines
-library(splines)
-library(mgcv)
-library(caret)
+
 fit.control <- trainControl(method = "cv", number = 10, savePredictions=TRUE)
 gam.spline.fit <- train(SalePrice ~ ., data = train_set, method = "gam", trControl=fit.control, tuneLength = 0)
 gam.spline.fit$result
@@ -581,6 +581,47 @@ unique(final_df$PrincipalUse)
 # result <- unique(rbind(result, data.frame(Model=c("GAM using Splines"),
 #                                           RMSE = c(lasso.RMSE),
 #                                           CVR2=c(R_square))))
+
+# gives error memory exhaust
+# tyring setting up k-fold cv without caret
+
+library(gam)
+
+spline_df <- train_rm[complete.cases(train_rm), ]
+spline_df_x <- spline_df %>% select(-c(SalePrice))
+
+# Tuning parameter= the bins, suggest some possible values
+number_of_bins = seq(1,8)
+k = 10
+folds = sample( 1:k, nrow(Saletr), replace=TRUE ) 
+cv.errors = matrix( NA, k, length(number_of_bins) )
+
+for( i in 1:length(number_of_bins)){ # for each number of knots to test
+  
+  smooth <- spline_df_x %>% select_if(negate(is.factor))
+  smooth <- colnames(smooth[, sapply(lapply(smooth, unique), length) > i+2])
+  nonsmooth <- colnames(spline_df_x[ , -which(names(spline_df_x) %in% smooth)])
+
+  
+  print(smooth)
+  print(nonsmooth)
+  
+  form<-as.formula(
+   paste0("SalePrice~",paste0("s(",smooth,",k=i,bs=\"cr\")",collapse="+"),"+",paste0("",nonsmooth,collapse="+"),collapse=""))
+  
+  
+  for( j in 1:k ){ # for each fold
+    cubicfit = mgcv::gam(data=spline_df[folds!=j,], form,family=gaussian )
+    cubicpred = predict( cubicfit, newdata=spline_df[folds==j,] )
+    cv.errors[j,i] = mean( ( spline_df[folds==j,]$SalePrice - cubicpred )^2 ) }
+  
+}
+
+cv.errors.mean = apply(cv.errors,2,mean)
+cv.errors.stderr = apply(cv.errors,2,sd)/sqrt(k)
+
+min.cv.index = which.min( cv.errors.mean )
+one_se_up_value = ( cv.errors.mean+cv.errors.stderr )[min.cv.index] 
 ```
 
 ```{r PCR & Random Forest}
@@ -644,43 +685,4 @@ train_red_x <- train_rm_x[, colnames(train_rm_x) %in% row.names(lasso_feat)]
 test_red_x <- test_rm_x[, colnames(test_rm_x) %in% row.names(lasso_feat)]
 ```
 
-```{r GAM Splines}
-library(mgcv)
-library(gam)
 
-spline_df <- train_rm[complete.cases(train_rm), ]
-
-p<-length(spline_df)
-regressor <- colnames(spline_df[, -c(1)])
-form<-as.formula(paste0("SalePrice~",paste0("s(",regressor,")",collapse="+")))
-
-# colnames(factors[, sapply(lapply(factors, unique), length) < 3])
-
-# smoothing splines do not work on categorical variables with levels less than maximum degrees of freedom
-
-factors <- names(Filter(is.factor,spline_df))
-nonfactors <- spline_df[ , -which(names(spline_df) %in% factors)]
-nonfactors <- colnames(nonfactors[, sapply(lapply(nonfactors, unique), length) > 5])
-
-form<-as.formula(
- paste0("SalePrice~",paste0("s(",nonfactors,",k=5,bs=\"cr\")",collapse="+"),"+",paste0("",factors,collapse="+"),collapse=""))
-
-fit <- mgcv::gam(data=spline_df,formula=form,family=gaussian)
-plot(fit)
-
-iter = 100
-mse_ns <- rep(0, 1)
-adj_r_square_ns <- rep(0, 1)
-for (i in 1:iter) {
-  spline_fit <- <- gam(SalePrice ~ x + s(z,k=-1,bs="cr"))
-  spline_pred <- predict(spline_fit, test_x)
-  mse_ns[i] <- mean((spline_pred - test_bos$SalePrice)^2)
-  adj_r_square_ns[i] <- summary(spline_fit)$adj.r.squared
-}
-
-which.min(mse_ns)
-which.max(adj_r_square_ns)
-
-mse_ns[14]
-adj_r_square_ns[41]
-```
