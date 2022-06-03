@@ -260,7 +260,7 @@ View(distinct(resBldg, mm_key))
 View(distinct(df, AccyType))
 
 final_df <- sales %>%
-  filter(SalePrice > 0) %>% 
+  filter(SalePrice > 0 & !is.na(SalePrice)) %>% 
   left_join(resBldg, by="mm_key") %>%
   group_by(mm_key, DocumentDate) %>%
   filter(DocumentDate >= YrBuilt) %>%
@@ -268,12 +268,16 @@ final_df <- sales %>%
   # 311526 obs.
   
 final_df <- final_df %>%
-  left_join(parcel, by="mm_key") %>%
-  # 311526 obs.
-  left_join(c_units, by="mm_key")
+  left_join(parcel, by="mm_key")
   # 311526 obs.
 
 save(final_df, file="sales.Rda")
+
+# This proves that condo is useless
+test <- final_df %>%
+  right_join(c_units, by="mm_key") %>%
+  filter(!is.na(SalePrice))
+  # 311526 obs.
 
 
 # # Tests to see if there are duplicate mm_keys that do NOT
