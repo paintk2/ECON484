@@ -15,6 +15,7 @@ library(stringr)
 library(fastDummies)
 library(glmnet)
 library(glue)
+library(splines)
 ```
 
 ```{r accesory}
@@ -624,4 +625,21 @@ lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>
 
 train_red_x <- train_rm_x[, colnames(train_rm_x) %in% row.names(lasso_feat)]
 test_red_x <- test_rm_x[, colnames(test_rm_x) %in% row.names(lasso_feat)]
+```
+```{r GAM Splines}
+iter = 100
+mse_ns <- rep(0, 1)
+adj_r_square_ns <- rep(0, 1)
+for (i in 1:iter) {
+  spline_fit <- lm(SalePrice ~ bs(~, final_df=i, degree=3), data=final_df)
+  spline_pred <- predict(spline_fit, test_x)
+  mse_ns[i] <- mean((spline_pred - test_bos$SalePrice)^2)
+  adj_r_square_ns[i] <- summary(spline_fit)$adj.r.squared
+}
+
+which.min(mse_ns)
+which.max(adj_r_square_ns)
+
+mse_ns[14]
+adj_r_square_ns[41]
 ```
