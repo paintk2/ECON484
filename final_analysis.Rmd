@@ -346,14 +346,6 @@ sapply(final_df, function(x) sum(x == 0))
 unique(final_df$ZipCode)
 ```
 
-```{r clean data}
-# Drop columns with only one level
-final_df <- final_df[, sapply(lapply(final_df, unique), length) > 1]
-
-# drop mm_key after join
-final_df <- subset (final_df, select = -mm_key)
-```
-
 ```{r joinAccessory}
 # Join sales and accessory
 
@@ -386,6 +378,23 @@ acc_df %>%
   arrange(mm_key)
 ```
 
+```{r clean data}
+# Drop columns with only one level
+final_df <- final_df[, sapply(lapply(final_df, unique), length) > 1]
+
+# drop mm_key after join
+final_df <- subset (final_df, select = -mm_key)
+
+# drop SqFt variables
+final_df <- subset (final_df, select = -c(SqFt1stFloor, SqFtHalfFloor, SqFt2ndFloor, SqFtUpperFloor, SqFtUnfinFull, SqFtUnfinHalf, SqFtTotBasement, SqFtFinBasement))
+
+# drop other unimportant variables
+final_df <- subset (final_df, select = -c(PcntComplete, AddnlCost, PlatBlock, LevyCode, Area, CurrentZoning))
+
+# bucket columns with too many level RF cannot take variables with more than 53 level
+# or transform to dummies
+colnames(final_df[, sapply(lapply(final_df, unique), length) > 53])
+```
 
 ```{r test train set up}
 test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
