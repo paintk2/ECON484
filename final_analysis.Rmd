@@ -15,6 +15,7 @@ library(stringr)
 library(fastDummies)
 library(glmnet)
 library(glue)
+library(splines)
 ```
 
 ```{r accesory}
@@ -256,8 +257,8 @@ c_units = test(cleaned_condo_units, "TopFloor", "Fireplace","EndUnit")
 
 
 ```{r merge}
-View(distinct(resBldg, mm_key))
-View(distinct(df, AccyType))
+# View(distinct(resBldg, mm_key))
+# View(distinct(df, AccyType))
 
 final_df <- sales %>%
   filter(SalePrice > 0) %>% 
@@ -268,9 +269,7 @@ final_df <- sales %>%
   # 311526 obs.
   
 final_df <- final_df %>%
-  left_join(parcel, by="mm_key") %>%
-  # 311526 obs.
-  left_join(c_units, by="mm_key")
+  left_join(parcel, by="mm_key")
   # 311526 obs.
 
 save(final_df, file="sales.Rda")
@@ -323,7 +322,7 @@ save(final_df, file="sales.Rda")
 ```
 
 
-```{r clean}
+```{r clean analysis}
 # Analyzing how to clean the final data
 
 # chekcing of NA
@@ -347,81 +346,91 @@ sapply(final_df, function(x) sum(x == 0))
 unique(final_df$ZipCode)
 ```
 
+```{r clean data}
+# Drop columns with only one level
+final_df <- final_df[, sapply(lapply(final_df, unique), length) > 1]
+
+# drop mm_key after join
+final_df <- subset (final_df, select = -mm_key)
+```
 
 ```{r joinAccessory}
 # Join sales and accessory
 
-# Selecting cols to easily see the join result
-col = c("mm_key", "DocumentDate", "DateValued","AccyType_1","AccyType_2","AccyType_3", "AccyType_6", "AccyType_7","AccyType_8","AccyType_12", "AccyType_13", "AccyType_14","AccyType_15" ,"AccyType_16", "AccyType_17", "AccyType_18","AccyType_19","AccyType_20","AccyType_21","AccyType_22","AccyType_23", "AccyType_24","AccyType_25","AccyType_26","AccyType_27","AccyType_28", "AccyType_29","AccyType_30",        "AccyType_31","AccyType_32","AccyType_33","AccyType_34", "AccyType_35","AccyType_36",  "AccyType_37" , "AccyType_38", "AccyType_39","AccyType_40")
-
-col2 = c("DateValued","AccyType_1","AccyType_2","AccyType_3", "AccyType_6", "AccyType_7","AccyType_8","AccyType_12", "AccyType_13", "AccyType_14","AccyType_15" ,"AccyType_16", "AccyType_17", "AccyType_18","AccyType_19","AccyType_20","AccyType_21","AccyType_22","AccyType_23", "AccyType_24","AccyType_25","AccyType_26","AccyType_27","AccyType_28", "AccyType_29","AccyType_30",        "AccyType_31","AccyType_32","AccyType_33","AccyType_34", "AccyType_35","AccyType_36",  "AccyType_37" , "AccyType_38", "AccyType_39","AccyType_40")
 
 acc_df <- left_join(final_df, accessory)
-# acc_df <- acc_df %>%
-#   select(col)
 
 # Keep records for houses that either have no record of accessory or accessory's date value was before 
 # the sale of the house
 # If there is one obs for a mm_key 12345-12345 with sales year 2012 value date 2015, this obs is removed
-acc_df2 <- acc_df %>%
+acc_df <- acc_df %>%
   group_by(mm_key, DocumentDate) %>%
   mutate(DateValued = ifelse(DateValued <= DocumentDate, DateValued, NA))%>% 
   distinct()
 
-acc_df2 <- acc_df2 %>%
-  mutate(DateValued = ifelse(is.na(DateValued), 0, DateValued))
-
 # If there were multiple changes between sales, only keep the most recent one
-acc_df3 <- acc_df2 %>%
+acc_df <- acc_df %>%
   group_by(mm_key, DocumentDate) %>%
   filter((DateValued == max(DateValued) | is.na(DateValued))) %>% 
   distinct()
   
 # Check for duplicates
-acc_df2 %>%
+acc_df %>%
   group_by(mm_key) %>%
   filter(n() > 1) %>%
   arrange(mm_key)
 
-acc_df3 %>%
+acc_df %>%
   group_by(mm_key) %>%
   filter(n() > 1) %>%
   arrange(mm_key)
-
-acc_df4 <- acc_df3 %>%
-  select(-col2)
-
-# Please double check if the number of observations is correct
-diff <- setdiff(acc_df4,final_df)
-final_df[ !(final_df$mm_key %in% acc_df4$mm_key), ]
 ```
 
 
-```{r LASSO}
-# LASSO model selection and LASSO regression
-# The resulting coefficients will be biased towards 0!
+```{r test train set up}
+test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
+train_set <- final_df[-test_index,]
+test_set <- final_df[test_index,]
+
+# convert to matrix
+train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
+train_y <- train_set$SalePrice
+test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
+test_y <- test_set$SalePrice
 
 # Store model name, RMSE, and cross validated R2 as dataframe
 result <- data.frame(Model=character(),
                  RMSE=double(), 
                  CVR2=double(), 
                  stringsAsFactors=FALSE) 
+```
 
-# Split test and train data
-test_index <- sample(1:nrow(acc_df4), as.integer(nrow(acc_df4)*0.2))
-train_set <- acc_df3[-test_index,]
-test_set <- acc_df3[test_index,]
+```{r LASSO regression}
+# LASSO model selection and LASSO regression
+# The resulting coefficients will be biased towards 0!
 
-# Convert to matrix
-train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
-train_y <- train_set$SalePrice
-
-test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
-test_y <- test_set$SalePrice
-
-# Fit LASSO and predict
+# Fit LASSO and do LASSO regression
 lasso.fit <- cv.glmnet(train_x, train_y, family = "gaussian", alpha = 1, k = 5)
 pred <- predict(lasso.fit, test_x, s = "lambda.min", type = "response")
+
+# Get test errors and store results
+lasso.RMSE <- sqrt(mean((pred - test_set$SalePrice)^2))
+lasso.R2 <- lasso.fit$glmnet.fit$dev.ratio[which(lasso.fit$glmnet.fit$lambda == lasso.fit$lambda.min)]
+
+result <- unique(rbind(result, data.frame(Model=c("LASSO + LASSO regression"),
+                                          RMSE = c(lasso.RMSE),
+                                          CVR2=c(lasso.R2))))
+
+# print coefficients
+coef(lasso.fit, s = "lambda.min")
+```
+
+```{r LASSO OLS}
+# LASSO model selection and OLS
+# The resulting coefficients will be biased towards 0!
+
+# Do OLS on LASSO
+pred <- predict(lasso.fit, test_x, s = 0, type = "response")
 
 # Get test errors and store results
 lasso.RMSE <- sqrt(mean((pred - test_set$SalePrice)^2))
@@ -430,7 +439,207 @@ lasso.R2 <- lasso.fit$glmnet.fit$dev.ratio[which(lasso.fit$glmnet.fit$lambda == 
 result <- unique(rbind(result, data.frame(Model=c("LASSO + OLS"),
                                           RMSE = c(lasso.RMSE),
                                           CVR2=c(lasso.R2))))
+```
 
-# print coefficients
-coef(lasso.fit, s = "lambda.min")
+```{r Ridge Regression}
+# Fit Ridge Regression and predict
+fit <- glmnet(train_x, train_y, alpha = 0)
+plot(fit)
+
+# find the optimal lambda
+ridge.fit <- cv.glmnet(train_x, train_y, alpha = 0)
+plot(ridge.fit)
+optimal_lambda <- ridge.fit$lambda.min
+optimal_lambda
+
+# extract all fitted models
+fit <- ridge.fit$cv.glmnet
+summary(fit)
+ridge.pred.train <- predict(ridge.fit, s = optimal_lambda, newx = train_x)
+ridge.pred.test <- predict(ridge.fit, s = optimal_lambda, newx = test_x)
+
+# compute R^2 from true and predicted values
+ridge.results <- function(true, predicted, df) {
+  SSE <- sum((predicted - true)^2)
+  SST <- sum((true - mean(true))^2)
+  R_square <- 1 - SSE / SST
+  RMSE = sqrt(SSE/nrow(final_df))
+# Model performance metrics
+result <- unique(rbind(result, data.frame(Model=c("Ridge regression"),
+                                          RMSE = c(lasso.RMSE),
+                                          CVR2=c(R_square))))
+# result for both train and test data
+ridge.results(train_y, ridge.pred.train, train_set)
+ridge.results(test_y, ridge.pred.test, test_set)
+
+```
+
+```{r DoubleLasso}
+#Double LASSO
+
+# Step 1) Creating Test and Train sets:
+
+test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
+train_set <- final_df[-test_index,]
+test_set <- final_df[test_index,]
+
+train_xall <- data.matrix(train_set[,names(train_set) != "SalePrice" ])
+
+#Removing Covariates of Interest from X
+train_x = as.matrix(subset(train_xall,select = -c(SqFtTotLiving))) #We remove our Covariate of Interest
+
+train_y = train_set$SalePrice #Creating our training set for independant variable
+
+test_xall <- data.matrix(test_set[,names(train_set) != "SalePrice" ])
+
+#Removing Covariates of Interest from X
+test_x = as.matrix(subset(test_xall,select = -c(SqFtTotLiving)))
+
+test_y <- test_set$SalePrice #setting our independent variable to log y 
+
+#Creating Covariates Set
+covariates_train = as.vector(subset(train_xall,select = c(SqFtTotLiving)))
+covariates_test = as.vector(subset(test_xall,select = c(SqFtTotLiving)))
+
+#Step 2 Selecting variables that predict outcome:
+library(glmnet)
+n=nrow(train_x) 
+p=ncol(train_x) 
+sd1=sd(covariates_train)
+lambda1 = .5*sd1*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+summary(lambda1) 
+k = 1 
+while(k < 15){ 
+  fitY = glmnet(train_x,as.vector(covariates_train), lambda=lambda1) 
+  ba = coef(fitY, s = lambda1) 
+  ea = predict(fitY,test_x) 
+  sda = sd(ea) 
+  lambda1 = sda*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+  k = k+1 
+} 
+ba 
+
+# Step 3: Select variables that predict treatment 
+
+n=nrow(train_x) 
+p=ncol(train_x)
+t = ncol(test_x)
+sd1=sd(train_y) 
+lambda1 = .5*sd1*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p))   
+summary(lambda1) 
+k = 1 
+while(k < 15){ 
+  fitT = glmnet(train_x, train_y, lambda=lambda1) 
+  ba = coef(fitT, s = lambda1) 
+  ea = predict(fitT,test_x ) 
+  sda = sd(ea) 
+  lambda1 = sda*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+  k = k+1 
+} 
+ba 
+
+#STEP 3: linear regression with both sets of variables 
+
+use = union(which(abs(fitY$beta)>0),which(abs(fitT$beta) > 0)) 
+X = cbind(covariates_test,test_x)
+use = c(1,use+1)
+fitr <- lm(test_y~ X[,use], data=final_df) 
+summary(fitr) # show results Coeff est of "covariates test" shows the magnitude of the causal relationship
+
+```
+
+
+```{r spline}
+# Generalized Additive Model using Splines
+library(splines)
+library(mgcv)
+library(caret)
+fit.control <- trainControl(method = "cv", number = 10, savePredictions=TRUE)
+gam.spline.fit <- train(SalePrice ~ ., data = train_set, method = "gam", trControl=fit.control, tuneLength = 0)
+gam.spline.fit$result
+
+train_set[, sapply(lapply(train_set, unique), length) < 2]
+unique(final_df$PrincipalUse)
+
+# result <- unique(rbind(result, data.frame(Model=c("GAM using Splines"),
+#                                           RMSE = c(lasso.RMSE),
+#                                           CVR2=c(R_square))))
+```
+
+```{r PCR & Random Forest}
+library(class)
+library(pls)
+
+data_red <- final_df %>% 
+  ungroup() %>% 
+  select(-c(mm_key, ZipCode, DocumentDate, PrincipalUse, SaleReason, SaleInstrument, 
+            ViewUtilization, YrRenovated, QuarterSection, CurrentZoning, PropType)) %>% 
+  mutate(DistrictName = gsub(" ", "", DistrictName, fixed = TRUE)) %>% 
+  mutate(DistrictName = as.numeric(as.factor(DistrictName))) %>% 
+  na.omit() 
+
+levels <- as.data.frame(as.matrix(sapply(lapply(data_red, unique), length))) %>% 
+  filter(row.names(.) == "SalePrice" | V1 > 1 & V1 <= 53)
+
+data_rm <- data_red[, colnames(data_red) %in% row.names(levels)]
+
+test_index <- sample(1:nrow(data_rm), as.integer(nrow(data_rm)*0.2))
+train_rm <- data_rm[-test_index,]
+test_rm <- data_rm[test_index,]
+
+train_rm_x <- data.matrix(train_rm[, names(train_rm) != "SalePrice"])
+train_rm_y <- train_rm$SalePrice
+
+test_rm_x <- data.matrix(test_rm[, names(test_rm) != "SalePrice"])
+test_rm_y <- test_rm$SalePrice
+
+# PCR
+pcr_mod <- pcr(log(SalePrice) ~., data = train_rm, validation = "CV") # try scale = T
+
+summary(pcr_mod)
+ 
+validationplot(pcr_mod, val.type = "MSEP")
+
+pcr_pred <- predict(pcr_mod, data_rm[test_index,], ncomp = 100)
+
+mean(((10^pcr_pred) - test_rm_y)^2)
+
+# Random Forest 
+library(randomForest)
+# 
+# # Using features selected by LASSO 
+# lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
+#   filter(s1 > 0) 
+#   
+# train_red <- train_rm[, colnames(train_rm) %in% row.names(lasso_feat) | names(train_rm) == "SalePrice"]
+
+bag.rf <- randomForest(SalePrice ~ ., data = as.data.frame(train_rm), mtry = 8, importance = T)
+
+yhat.bag <- predict(bag.boston , newdata = Boston[-train , ])
+
+
+
+# Using features selected by LASSO on PCR and KNN
+lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
+  filter(s1 > 0)
+
+train_red_x <- train_rm_x[, colnames(train_rm_x) %in% row.names(lasso_feat)]
+test_red_x <- test_rm_x[, colnames(test_rm_x) %in% row.names(lasso_feat)]
+```
+```{r GAM Splines}
+iter = 100
+mse_ns <- rep(0, 1)
+adj_r_square_ns <- rep(0, 1)
+for (i in 1:iter) {
+  spline_fit <- lm(SalePrice ~ bs(~, final_df=i, degree=3), data=final_df)
+  spline_pred <- predict(spline_fit, test_x)
+  mse_ns[i] <- mean((spline_pred - test_bos$SalePrice)^2)
+  adj_r_square_ns[i] <- summary(spline_fit)$adj.r.squared
+}
+
+which.min(mse_ns)
+which.max(adj_r_square_ns)
+
+mse_ns[14]
+adj_r_square_ns[41]
 ```
