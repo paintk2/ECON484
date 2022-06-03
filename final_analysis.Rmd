@@ -256,8 +256,8 @@ c_units = test(cleaned_condo_units, "TopFloor", "Fireplace","EndUnit")
 
 
 ```{r merge}
-View(distinct(resBldg, mm_key))
-View(distinct(df, AccyType))
+# View(distinct(resBldg, mm_key))
+# View(distinct(df, AccyType))
 
 final_df <- sales %>%
   filter(SalePrice > 0) %>% 
@@ -268,9 +268,7 @@ final_df <- sales %>%
   # 311526 obs.
   
 final_df <- final_df %>%
-  left_join(parcel, by="mm_key") %>%
-  # 311526 obs.
-  left_join(c_units, by="mm_key")
+  left_join(parcel, by="mm_key")
   # 311526 obs.
 
 save(final_df, file="sales.Rda")
@@ -323,7 +321,7 @@ save(final_df, file="sales.Rda")
 ```
 
 
-```{r clean}
+```{r clean analysis}
 # Analyzing how to clean the final data
 
 # chekcing of NA
@@ -347,6 +345,13 @@ sapply(final_df, function(x) sum(x == 0))
 unique(final_df$ZipCode)
 ```
 
+```{r clean data}
+# Drop columns with only one level
+final_df <- final_df[, sapply(lapply(final_df, unique), length) > 1]
+
+# drop mm_key after join
+final_df <- subset (final_df, select = -mm_key)
+```
 
 ```{r joinAccessory}
 # Join sales and accessory
@@ -391,17 +396,17 @@ train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
 train_y <- train_set$SalePrice
 test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
 test_y <- test_set$SalePrice
-```
-
-```{r LASSO regression}
-# LASSO model selection and LASSO regression
-# The resulting coefficients will be biased towards 0!
 
 # Store model name, RMSE, and cross validated R2 as dataframe
 result <- data.frame(Model=character(),
                  RMSE=double(), 
                  CVR2=double(), 
                  stringsAsFactors=FALSE) 
+```
+
+```{r LASSO regression}
+# LASSO model selection and LASSO regression
+# The resulting coefficients will be biased towards 0!
 
 # Fit LASSO and do LASSO regression
 lasso.fit <- cv.glmnet(train_x, train_y, family = "gaussian", alpha = 1, k = 5)
@@ -540,6 +545,24 @@ use = c(1,use+1)
 fitr <- lm(test_y~ X[,use], data=final_df) 
 summary(fitr) # show results Coeff est of "covariates test" shows the magnitude of the causal relationship
 
+```
+
+
+```{r spline}
+# Generalized Additive Model using Splines
+library(splines)
+library(mgcv)
+library(caret)
+fit.control <- trainControl(method = "cv", number = 10, savePredictions=TRUE)
+gam.spline.fit <- train(SalePrice ~ ., data = train_set, method = "gam", trControl=fit.control, tuneLength = 0)
+gam.spline.fit$result
+
+train_set[, sapply(lapply(train_set, unique), length) < 2]
+unique(final_df$PrincipalUse)
+
+# result <- unique(rbind(result, data.frame(Model=c("GAM using Splines"),
+#                                           RMSE = c(lasso.RMSE),
+#                                           CVR2=c(R_square))))
 ```
 
 
