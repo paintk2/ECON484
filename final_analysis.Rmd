@@ -565,4 +565,63 @@ unique(final_df$PrincipalUse)
 #                                           CVR2=c(R_square))))
 ```
 
+```{r PCR & Random Forest}
+library(class)
+library(pls)
 
+data_red <- final_df %>% 
+  ungroup() %>% 
+  select(-c(mm_key, ZipCode, DocumentDate, PrincipalUse, SaleReason, SaleInstrument, 
+            ViewUtilization, YrRenovated, QuarterSection, CurrentZoning, PropType)) %>% 
+  mutate(DistrictName = gsub(" ", "", DistrictName, fixed = TRUE)) %>% 
+  mutate(DistrictName = as.numeric(as.factor(DistrictName))) %>% 
+  na.omit() 
+
+levels <- as.data.frame(as.matrix(sapply(lapply(data_red, unique), length))) %>% 
+  filter(row.names(.) == "SalePrice" | V1 > 1 & V1 <= 53)
+
+data_rm <- data_red[, colnames(data_red) %in% row.names(levels)]
+
+test_index <- sample(1:nrow(data_rm), as.integer(nrow(data_rm)*0.2))
+train_rm <- data_rm[-test_index,]
+test_rm <- data_rm[test_index,]
+
+train_rm_x <- data.matrix(train_rm[, names(train_rm) != "SalePrice"])
+train_rm_y <- train_rm$SalePrice
+
+test_rm_x <- data.matrix(test_rm[, names(test_rm) != "SalePrice"])
+test_rm_y <- test_rm$SalePrice
+
+# PCR
+pcr_mod <- pcr(log(SalePrice) ~., data = train_rm, validation = "CV") # try scale = T
+
+summary(pcr_mod)
+ 
+validationplot(pcr_mod, val.type = "MSEP")
+
+pcr_pred <- predict(pcr_mod, data_rm[test_index,], ncomp = 100)
+
+mean(((10^pcr_pred) - test_rm_y)^2)
+
+# Random Forest 
+library(randomForest)
+# 
+# # Using features selected by LASSO 
+# lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
+#   filter(s1 > 0) 
+#   
+# train_red <- train_rm[, colnames(train_rm) %in% row.names(lasso_feat) | names(train_rm) == "SalePrice"]
+
+bag.rf <- randomForest(SalePrice ~ ., data = as.data.frame(train_rm), mtry = 8, importance = T)
+
+yhat.bag <- predict(bag.boston , newdata = Boston[-train , ])
+
+
+
+# Using features selected by LASSO on PCR and KNN
+lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
+  filter(s1 > 0)
+
+train_red_x <- train_rm_x[, colnames(train_rm_x) %in% row.names(lasso_feat)]
+test_red_x <- test_rm_x[, colnames(test_rm_x) %in% row.names(lasso_feat)]
+```
