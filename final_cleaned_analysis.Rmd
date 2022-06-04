@@ -434,7 +434,7 @@ result <- unique(rbind(result, data.frame(Model=c("Double LASSO + OLS"),
 ```
 
 
-```{r GAM spline, eval = FALSE}
+```{r GAM spline}
 # Generalized Additive Model using Splines
 fit.control <- trainControl(method = "cv", number = 10, savePredictions=TRUE)
 gam.spline.fit <- train(SalePrice ~ ., data = train_set, method = "gam", trControl=fit.control, tuneLength = 0)
@@ -529,11 +529,11 @@ pcr_pred <- predict(pcr_mod, validation_x, ncomp = 47)
 
 mse_pcr <- mean((pcr_pred - as.vector(validation_y))^2)
 
-SSE <- sum((pcr_pred - validation_y)^2)
+SSE <- sum((c(pcr_pred) - validation_y)^2)
 SST <- sum((validation_y - mean(validation_y))^2)
 R2_pcr <- 1 - SSE / SST
 
-result <- unique(rbind(result, data.frame(Model=c("Step"),
+result <- unique(rbind(result, data.frame(Model=c("PCR"),
                                           MSE = c(mse_pcr),
                                           CVR2=c(R2_pcr))))
 
