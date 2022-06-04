@@ -1,0 +1,57 @@
+library(tidyverse)
+library(dplyr)
+
+# Data Wrangling 
+raw_sales <- read.csv("EXTR_RPSale.csv")
+#change document date to year/date format 
+# remove non-residential buildings
+sales_clean <- raw_sales %>% 
+  filter(PropertyType %in% c(10, 11, 12, 13, 14, 18, 19, 2, 3, 6)) %>% 
+  filter(PrincipalUse == 6) %>%
+  # filter(SaleReason %in% c(0, 1)) %>%
+  filter(SalePrice > 0) %>%
+  filter(!SaleInstrument %in% c(26, 28))
+dim(sales_clean)
+
+sales_clean <- sales_clean[sales_clean$SaleWarning == " ", ]
+ggplot(sales_clean, aes(as.factor(SaleInstrument), SalePrice)) +
+  geom_boxplot() + 
+  coord_cartesian(ylim = c(0, 50000)) 
+dim(sales_clean)
+# mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
+# sales <- sales_clean %>% 
+#   filter(DocumentDate >= "2012-01-01")
+sales <- sales_clean %>%
+  mutate(YrSold = as.numeric(substr(DocumentDate, 7, 10))) %>%
+  mutate(MoSold = as.factor(substr(DocumentDate, 1, 2))) %>%
+  filter(YrSold >= 2012) %>%
+  select( -c(DocumentDate))
+
+combineID <- function(df) {
+  df %>% 
+    mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+    select(-c(Major, Minor))
+}
+sales <- combineID(sales)
+# removing useless information
+sales <- sales %>%
+  select(c(mm_key, YrSold, MoSold, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
+sales$PropertyType <- as.factor(sales$PropertyType)
+sales$PrincipalUse <- as.factor(sales$PrincipalUse)
+sales$SaleInstrument <- as.factor(sales$SaleInstrument)
+sales$SaleReason <- as.factor(sales$SaleReason)
+sales$PropertyClass <- as.factor(sales$PropertyClass)
+
+lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+sales$AFCurrentUseLand <- lookup[sales$AFCurrentUseLand]
+sales$AFCurrentUseLand[is.na(sales$AFCurrentUseLand)] = 0
+sales$AFCurrentUseLand <- as.factor(sales$AFCurrentUseLand)
+sales$AFForestLand <- lookup[sales$AFForestLand]
+sales$AFForestLand[is.na(sales$AFForestLand)] = 0
+sales$AFForestLand <- as.factor(sales$AFForestLand)
+sales$AFHistoricProperty <- lookup[sales$AFHistoricProperty]
+sales$AFHistoricProperty[is.na(sales$AFHistoricProperty)] = 0
+sales$AFHistoricProperty <- as.factor(sales$AFHistoricProperty)
+sales$AFNonProfitUse <-lookup[sales$AFNonProfitUse]
+sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0
+sales$AFNonProfitUse <- as.factor(sales$AFNonProfitUse)
