@@ -1,0 +1,581 @@
+---
+title: "Real Estate Analysis"
+author: "Group 4"
+date: '2022-05-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+library(tidyverse, quietly = T)
+library(stringr, quietly = T)
+library(fastDummies, quietly = T)
+library(glmnet, quietly = T)
+library(glue, quietly = T)
+library(splines, quietly = T)
+library(mgcv, quietly = T)
+library(caret, quietly = T)
+```
+## Data Used in Final Analysis  
+
+```{r sales}
+# Data Wrangling 
+raw_sales <- read.csv("./data/EXTR_RPSale.csv")
+#change document date to year/date format 
+# remove non-residential buildings
+sales_clean <- raw_sales %>% 
+  filter(PropertyType %in% c(10, 11, 12, 13, 14, 18, 19, 2, 3, 6)) %>% 
+  filter(PrincipalUse == 6) %>%
+  # filter(SaleReason %in% c(0, 1)) %>%
+  filter(SalePrice > 0) %>%
+  filter(!SaleInstrument %in% c(26, 28))
+dim(sales_clean)
+sales_clean <- sales_clean[sales_clean$SaleWarning == " ", ]
+ggplot(sales_clean, aes(as.factor(SaleInstrument), SalePrice)) +
+  geom_boxplot() + 
+  coord_cartesian(ylim = c(0, 50000)) 
+dim(sales_clean)
+# mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
+# sales <- sales_clean %>% 
+#   filter(DocumentDate >= "2012-01-01")
+sales <- sales_clean %>%
+  mutate(YrSold = as.numeric(substr(DocumentDate, 7, 10))) %>%
+  mutate(MoSold = as.factor(substr(DocumentDate, 1, 2))) %>%
+  filter(YrSold >= 2012)
+combineID <- function(df) {
+  df %>% 
+    mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+    select(-c(Major, Minor))
+}
+sales <- combineID(sales)
+# removing useless information
+sales <- sales %>%
+  select(c(mm_key, DocumentDate, YrSold, MoSold, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
+sales$PropertyType <- as.factor(sales$PropertyType)
+sales$PrincipalUse <- as.factor(sales$PrincipalUse)
+sales$SaleInstrument <- as.factor(sales$SaleInstrument)
+sales$SaleReason <- as.factor(sales$SaleReason)
+sales$PropertyClass <- as.factor(sales$PropertyClass)
+lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+sales$DocumentDate <- format(as.Date(sales$DocumentDate, format="%d/%m/%Y"),"%Y")
+sales$AFCurrentUseLand <- lookup[sales$AFCurrentUseLand]
+sales$AFCurrentUseLand[is.na(sales$AFCurrentUseLand)] = 0
+sales$AFCurrentUseLand <- as.factor(sales$AFCurrentUseLand)
+sales$AFForestLand <- lookup[sales$AFForestLand]
+sales$AFForestLand[is.na(sales$AFForestLand)] = 0
+sales$AFForestLand <- as.factor(sales$AFForestLand)
+sales$AFHistoricProperty <- lookup[sales$AFHistoricProperty]
+sales$AFHistoricProperty[is.na(sales$AFHistoricProperty)] = 0
+sales$AFHistoricProperty <- as.factor(sales$AFHistoricProperty)
+sales$AFNonProfitUse <-lookup[sales$AFNonProfitUse]
+sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0
+sales$AFNonProfitUse <- as.factor(sales$AFNonProfitUse)
+```
+
+
+```{r residential}
+resBldg <- read.csv("./data/EXTR_ResBldg.csv")
+resBldg <- combineID(resBldg)
+# removing useless
+resBldg <- resBldg %>%
+  select( -c(Address, BuildingNumber, Fraction, DirectionPrefix, StreetName, StreetType, DirectionSuffix, ))
+resBldg$BldgGrade <- as.factor(resBldg$BldgGrade)
+resBldg$FinBasementGrade <-
+  as.factor(resBldg$FinBasementGrade)
+resBldg$DaylightBasement <-
+  as.factor(resBldg$DaylightBasement) 
+resBldg$HeatSystem <- as.factor(resBldg$HeatSystem)
+resBldg$HeatSource <- as.factor(resBldg$HeatSource)
+resBldg <- resBldg %>% 
+  mutate(DaylightBasement = ifelse(tolower(DaylightBasement) == "y", 1, 0)) %>%
+  mutate(ViewUtilization = ifelse(tolower(ViewUtilization) == "y", 1, 0))
+str(resBldg)
+```
+
+
+
+```{r parcel}
+parcel <- read.csv("./data/EXTR_Parcel.csv")
+parcel_red <- parcel %>% 
+  select(-c(PropName, PlatName, PlatLot, SpecArea, SpecSubArea))  #plat lot ?? check 
+rm(parcel)
+parcel_red$Area <- as.factor(parcel_red$Area)
+parcel_red$SubArea <- as.factor(parcel_red$SubArea)
+parcel_red$HBUAsIfVacant <- as.factor(parcel_red$HBUAsIfVacant)
+parcel_red$HBUAsImproved <- as.factor(parcel_red$HBUAsImproved)
+parcel_red[, 18:24] <- lapply(parcel_red[, 18:24], function(y) {as.factor(y)})
+parcel_red <- parcel_red %>% 
+  mutate(Unbuildable = ifelse(Unbuildable == "True", 1, 0))
+parcel_red[, 27:36] <- lapply(parcel_red[, 27:36], function(y) {as.factor(y)}) 
+parcel_red[, 39:41] <- lapply(parcel_red[, 39:41], function(y) {as.factor(y)})
+parcel_red[, 44:46] <- lapply(parcel_red[, 44:46], function(y) {as.factor(y)})
+parcel_red$HistoricSite <- as.factor(parcel_red$HistoricSite)
+parcel_red$CurrentUseDesignation <- as.factor(parcel_red$CurrentUseDesignation)
+parcel_red[, 42:43] <- lapply(parcel_red[, 42:43], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+parcel_red[, 48:49] <- lapply(parcel_red[, 48:49], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+parcel_red[, 74:75] <- lapply(parcel_red[, 74:75], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+parcel_half <- parcel_red %>% 
+  select(NbrBldgSites:OtherProblems)
+parcel_red <- parcel_red %>% 
+  select(Major:OtherNuisances)
+parcel_half[, 3:5] <- lapply(parcel_half[, 3:5], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+parcel_half[, 8:27] <- lapply(parcel_half[, 8:27], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}})
+# rm(ls(parcel_half, parcel_red))
+parcel <- cbind(parcel_red, parcel_half)
+parcel <- parcel %>% 
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+  select(-c(Major, Minor))
+```
+
+```{r Merge Data Sets}
+# View(distinct(resBldg, mm_key))
+# View(distinct(df, AccyType))
+final_df <- sales %>%
+  filter(SalePrice > 0) %>% 
+  left_join(resBldg, by="mm_key") %>%
+  group_by(mm_key, DocumentDate) %>%
+  filter(DocumentDate >= YrBuilt) %>%
+  filter(YrBuilt == max(YrBuilt))
+  # 311526 obs.
+  
+final_df <- final_df %>%
+  left_join(parcel, by="mm_key")
+  # 311526 obs.
+save(final_df, file="sales.Rda")
+# # Tests to see if there are duplicate mm_keys that do NOT
+# # have distinct sale dates
+# test <- final_df %>%
+#   group_by(mm_key) %>%
+#   filter(n() > 1) %>%
+#   ungroup
+# test2 <- test %>%
+#   group_by(DocumentDate) %>%
+#   filter(n() > 1) %>%
+#   ungroup
+  
+  
+# test <- final_df %>%
+#   left_join(accessory, by="mm_key") %>% 
+#   relocate(DateValued, .after = DocumentDate) %>% 
+#   mutate(DateValued = ifelse(DateValued == "1900", NA, DateValued)) %>% 
+#   group_by(mm_key, DocumentDate) %>%
+#   filter(DocumentDate >= DateValued) 
+#   
+  
+#   group_by(mm_kry, DocumentDate) %>% 
+#   
+#   # left_join(accessory, by="mm_key") %>%
+#   # left_join(homeexe, by="mm_key") %>%
+# 
+#   # left_join(parcel, by="mm_key") %>%
+#   # left_join(c_units, by="mm_key")
+#   
+#   # left_join(valhist, by="mm_key") %>%
+#   # left_join(env, by="mm_key") %>%
+# resBldg %>%
+#   group_by(mm_key) %>% 
+#   add_count(mm_key) %>%
+#   filter(n()>1)
+# 
+# test <- df %>% 
+#   group_by(mm_key) %>% 
+#   add_count(mm_key) %>%
+#   filter(n()>1) %>%
+#   group_by(YrBuilt) %>% 
+#   filter(n()>1)
+# 
+# write.csv(final_df, "sales.csv", row.names = FALSE)
+```
+
+
+```{r Clean Data}
+# Drop columns with only one level
+final_df <- final_df[, sapply(lapply(final_df, unique), length) > 1]
+
+# drop mm_key after join
+final_df <- subset (final_df, select = -mm_key)
+
+# drop SqFt variables
+final_df <- subset (final_df, select = -c(SqFt1stFloor, SqFtHalfFloor, SqFt2ndFloor, SqFtUpperFloor, SqFtUnfinFull, SqFtUnfinHalf, SqFtTotBasement, SqFtFinBasement))
+
+# Explore data 
+hist(final_df$SalePrice, breaks = 100000, xlim = c(0, 10000000)) # Data is not normally distributed 
+hist(log(final_df$SalePrice), breaks = 100000) # Better distribution 
+
+# Remove NAs and scale response 
+data_use <- final_df %>% 
+  ungroup() %>% 
+  select(-c(DocumentDate, SaleReason, SaleInstrument, PlatBlock, DistrictName,
+            ViewUtilization, YrRenovated, QuarterSection, CurrentZoning)) %>% 
+  mutate(ZipCode = ifelse(ZipCode == "", NA, ZipCode)) %>% 
+  na.omit() %>% 
+  mutate_all(as.numeric) %>% 
+  relocate(SalePrice, .before = YrSold)
+
+data_use$SalePrice <- scale(data_use$SalePrice)
+
+# Check for multicollinearity 
+library(corrplot)
+
+# Create correlation table to inspect collinearity 
+check_cor <- as.data.frame(cor(data_use[, 2:80])) %>% 
+  mutate_if(is.numeric, ~round(., 2)) 
+  
+corrplot(cor(data_rm[, 2:87]), diag = FALSE, order = "AOE", tl.pos = "td", tl.cex = 1.0, method = "number", type = "upper")
+
+# drop hioghly correlated and other redundant variables
+the_data <- data_use %>% 
+  select(-c(CurrentUseDesignation, BldgGrade, FinBasementGrade, Range, Township, Area, SubArea, BldgGradeVar, FpAdditional,
+            PcntComplete, AddnlCost))
+# Save data 
+save(the_data, file="sales.Rda")
+
+load("sales.Rda")
+
+# Check for multicollinearity 
+# library(car)
+# xvar <- final_df %>% select(-c(SalePrice))
+# f<-as.formula(
+#    paste0("SalePrice~",paste0("",xvar,collapse="+"),collapse=""))
+# model_all <- lm(f, data=final_df)
+# ld.vars <- attributes(alias(model_all)$Complete)$dimnames[[1]]
+# drop.col <- gsub('[[:digit:]]+', '', ld.vars)
+# drop.col
+# remove linearly dependet variables
+# final_df2 <- final_df[ , -which(names(final_df) %in% drop.col)]
+#run model again
+# xvar <- final_df %>% select(-c(SalePrice))
+# f<-as.formula(
+#    paste0("SalePrice~",paste0("",xvar,collapse="+"),collapse=""))
+# model_all <-lm(f, data=final_df)
+# vif_values <- vif(model_all)           #create vector of VIF values
+# 
+# barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue") #create horizontal bar chart to display each VIF value
+# 
+# abline(v = 5, lwd = 3, lty = 2)    #add vertical line at 5 as after 5 there is severe correlation
+# 
+# data_x <- final_df %>% select(-c(SalePrice))                                      # independent variables 
+# 
+# var <- cor(data_x)                                         # independent variables correlation matrix 
+# 
+# var_inv <- ginv(var)                                       # independent variables inverse correlation matrix 
+# 
+# colnames(var_inv) <- colnames(data_x)                      # rename the row names and column names
+# rownames(var_inv) <- colnames(data_x)
+# 
+# corrplot(var_inv,method='number',is.corr = F)              # visualize the multicollinearity
+# Adding more stuff 
+```
+
+```{r Train and Test Set Up}
+# use validations set to compare different models
+# use test set to do final analysis on the selected model
+test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
+train_set <- final_df[-test_index,]
+test_set <- final_df[test_index,]
+validation_index <- sample(1:nrow(train_set), as.integer(nrow(train_set)*0.2))
+train_set <- final_df[-validation_index,]
+validation_set <- final_df[validation_index,]
+# convert to matrix
+train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
+train_y <- train_set$SalePrice
+test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
+test_y <- test_set$SalePrice
+validation_x <- data.matrix(validation_set[, names(validation_set) != "SalePrice"])
+validation_y <- validation_set$SalePrice
+# Store model name, MSE, and cross validated R2 as dataframe
+result <- data.frame(Model=character(),
+                 MSE=double(), 
+                 CVR2=double(), 
+                 stringsAsFactors=FALSE) 
+```
+
+```{r LASSO regression}
+# LASSO model selection and LASSO regression
+# The resulting coefficients will be biased towards 0!
+# Fit LASSO and do LASSO regression
+lasso.fit <- cv.glmnet(train_x, train_y, family = "gaussian", alpha = 1, k = 5)
+pred <- predict(lasso.fit, validation_x, s = "lambda.min", type = "response")
+# Get test errors and store results
+lasso.RMSE <- sqrt(mean((pred - validation_set$SalePrice)^2))
+lasso.R2 <- lasso.fit$glmnet.fit$dev.ratio[which(lasso.fit$glmnet.fit$lambda == lasso.fit$lambda.min)]
+result <- unique(rbind(result, data.frame(Model=c("LASSO + LASSO regression"),
+                                          MSE = c(lasso.RMSE),
+                                          CVR2=c(lasso.R2))))
+# print coefficients
+coef(lasso.fit, s = "lambda.min")
+```
+
+```{r LASSO OLS}
+# LASSO model selection and OLS
+# The resulting coefficients will be biased towards 0!
+# Do OLS on LASSO
+pred <- predict(lasso.fit, validation_x, s = 0, type = "response")
+# Get test errors and store results
+result <- unique(rbind(result, data.frame(Model=c("LASSO + OLS"),
+                                          MSE = c(),
+                                          CVR2=c())))
+```
+
+```{r Ridge Regression}
+# Fit Ridge Regression and predict
+fit <- glmnet(train_x, train_y, alpha = 0)
+plot(fit)
+# find the optimal lambda
+ridge.fit <- cv.glmnet(train_x, train_y, alpha = 0)
+plot(ridge.fit)
+optimal_lambda <- ridge.fit$lambda.min
+optimal_lambda
+# extract all fitted models
+fit <- ridge.fit$cv.glmnet
+summary(fit)
+ridge.pred.train <- predict(ridge.fit, s = optimal_lambda, newx = train_x)
+ridge.pred.test <- predict(ridge.fit, s = optimal_lambda, newx = validation_x)
+# compute R^2 from true and predicted values
+ridge.results <- function(true, predicted, df) {
+  SSE <- sum((predicted - true)^2)
+  SST <- sum((true - mean(true))^2)
+  R_square <- 1 - SSE / SST
+  MSE = SSE/nrow(final_df)
+}
+# result for both train and test data
+ridge.results(train_y, ridge.pred.train, train_set)
+ridge.results(validation_y, ridge.pred.test, validation_set)
+# Model performance metrics
+result <- unique(rbind(result, data.frame(Model=c("Ridge regression"),
+                                          MSE = c(MSE),
+                                          CVR2=c(R_square))))
+```
+
+```{r DoubleLasso}
+#Double LASSO
+# Step 1) Creating Test and Train sets:
+test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
+train_set <- final_df[-test_index,]
+test_set <- final_df[test_index,]
+train_xall <- data.matrix(train_set[,names(train_set) != "SalePrice" ])
+#Removing Covariates of Interest from X
+train_x = as.matrix(subset(train_xall,select = -c(SqFtTotLiving))) #We remove our Covariate of Interest
+train_y = train_set$SalePrice #Creating our training set for independant variable
+test_xall <- data.matrix(test_set[,names(train_set) != "SalePrice" ])
+#Removing Covariates of Interest from X
+test_x = as.matrix(subset(test_xall,select = -c(SqFtTotLiving)))
+test_y <- test_set$SalePrice #setting our independent variable to log y 
+#Creating Covariates Set
+covariates_train = as.vector(subset(train_xall,select = c(SqFtTotLiving)))
+covariates_test = as.vector(subset(test_xall,select = c(SqFtTotLiving)))
+#Step 2 Selecting variables that predict outcome:
+library(glmnet)
+n=nrow(train_x) 
+p=ncol(train_x) 
+sd1=sd(covariates_train)
+lambda1 = .5*sd1*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+summary(lambda1) 
+k = 1 
+while(k < 15){ 
+  fitY = glmnet(train_x,as.vector(covariates_train), lambda=lambda1) 
+  ba = coef(fitY, s = lambda1) 
+  ea = predict(fitY,test_x) 
+  sda = sd(ea) 
+  lambda1 = sda*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+  k = k+1 
+} 
+ba 
+# Step 3: Select variables that predict treatment 
+n=nrow(train_x) 
+p=ncol(train_x)
+t = ncol(test_x)
+sd1=sd(train_y) 
+lambda1 = .5*sd1*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p))   
+summary(lambda1) 
+k = 1 
+while(k < 15){ 
+  fitT = glmnet(train_x, train_y, lambda=lambda1) 
+  ba = coef(fitT, s = lambda1) 
+  ea = predict(fitT,test_x ) 
+  sda = sd(ea) 
+  lambda1 = sda*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
+  k = k+1 
+} 
+ba 
+#STEP 3: linear regression with both sets of variables 
+use = union(which(abs(fitY$beta)>0),which(abs(fitT$beta) > 0)) 
+X = cbind(covariates_test,test_x)
+use = c(1,use+1)
+fitr <- lm(test_y~ X[,use], data=final_df) 
+summary(fitr) # show results Coeff est of "covariates test" shows the magnitude of the causal relationship
+```
+
+
+```{r GAM spline, eval = FALSE}
+# Generalized Additive Model using Splines
+fit.control <- trainControl(method = "cv", number = 10, savePredictions=TRUE)
+gam.spline.fit <- train(SalePrice ~ ., data = train_set, method = "gam", trControl=fit.control, tuneLength = 0)
+gam.spline.fit$result
+train_set[, sapply(lapply(train_set, unique), length) < 2]
+unique(final_df$PrincipalUse)
+# result <- unique(rbind(result, data.frame(Model=c("GAM using Splines"),
+#                                           RMSE = c(lasso.RMSE),
+#                                           CVR2=c(R_square))))
+# gives error memory exhaust
+# tyring setting up k-fold cv without caret
+library(gam)
+spline_df <- train_rm[complete.cases(train_rm), ]
+spline_df_x <- spline_df %>% select(-c(SalePrice))
+# Tuning parameter= the bins, suggest some possible values
+number_of_bins = seq(1,8)
+k = 10
+folds = sample( 1:k, nrow(Saletr), replace=TRUE ) 
+cv.errors = matrix( NA, k, length(number_of_bins) )
+for( i in 1:length(number_of_bins)){ # for each number of knots to test
+  
+  smooth <- spline_df_x %>% select_if(negate(is.factor))
+  smooth <- colnames(smooth[, sapply(lapply(smooth, unique), length) > i+2])
+  nonsmooth <- colnames(spline_df_x[ , -which(names(spline_df_x) %in% smooth)])
+  
+  print(smooth)
+  print(nonsmooth)
+  
+  form<-as.formula(
+   paste0("SalePrice~",paste0("s(",smooth,",k=i,bs=\"cr\")",collapse="+"),"+",paste0("",nonsmooth,collapse="+"),collapse=""))
+  
+  
+  for( j in 1:k ){ # for each fold
+    cubicfit = mgcv::gam(data=spline_df[folds!=j,], form,family=gaussian )
+    cubicpred = predict( cubicfit, newdata=spline_df[folds==j,] )
+    cv.errors[j,i] = mean( ( spline_df[folds==j,]$SalePrice - cubicpred )^2 ) }
+  
+}
+cv.errors.mean = apply(cv.errors,2,mean)
+cv.errors.stderr = apply(cv.errors,2,sd)/sqrt(k)
+min.cv.index = which.min( cv.errors.mean )
+one_se_up_value = ( cv.errors.mean+cv.errors.stderr )[min.cv.index] 
+```
+
+```{r PCR}
+# PCR
+pcr_mod <- pcr(log(SalePrice) ~., data = train_x, validation = "CV") # try scale = T
+summary(pcr_mod)
+ 
+validationplot(pcr_mod, val.type = "MSEP")
+pcr_pred <- predict(pcr_mod, final_df[test_index,], ncomp = 100)
+mean(((10^pcr_pred) - test_y)^2)
+# Using features selected by LASSO on PCR and KNN
+lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
+  filter(s1 > 0)
+train_red_x <- train_x[, colnames(train_x) %in% row.names(lasso_feat)]
+test_red_x <- test_x[, colnames(test_x) %in% row.names(lasso_feat)]
+```
+
+## Data Sets Considered - Not Included 
+
+```{r accesory, eval = FALSE}
+accessory <- read.csv("./data/EXTR_Accessory_V.csv")
+accessory <- accessory %>% 
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
+  select(-c(Major, Minor, AccyDescr, UpdatedBy, UpdateDate)) %>% 
+  mutate(DateValued = substr(DateValued, 1, 4))
+accessory <- accessory %>% 
+  filter(Size >= 0)
+accessory$AccyType <- as.factor(accessory$AccyType)
+accessory <- accessory %>% 
+  select(mm_key, AccyType, DateValued) %>% 
+  group_by(mm_key, DateValued) %>% 
+  dummy_cols(select_columns = "AccyType") %>%
+  select(-AccyType) %>% 
+  group_by(mm_key, DateValued) %>% 
+  summarise(across(where(is.numeric), sum))
+accessory$DateValued <- as.integer(accessory$DateValued)
+```
+
+```{r, eval = FALSE}
+#Function to Sort Y/N
+y = data.frame()
+test = function(d,c1,...){
+colname = c(c1,...) 
+print(colname)
+print(length(colname))
+for(i in seq_along(colname)){
+    x = colname[i]
+    print(x)
+    print(class(x))
+    lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+    factor_cols <- c(x)
+    d[, factor_cols] = lookup[d[,factor_cols]]
+    
+    
+}
+ return(d)
+}
+```
+
+```{r condo, eval = FALSE}
+#Condo Units Data Set
+condo_units = read.csv("data/EXTR_CondoUnit2.csv")
+cu_df = data.frame(condo_units)
+cleaned_condo_units = cu_df %>%
+  mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%  #Creating mm_key
+  select(-c(Major, Minor)) %>%
+  select(-c(BldgNbr, UnitNbr,MHomeDescr,PersPropAcctNbr,Address,BuildingNumber,Fraction,DirectionPrefix,StreetName,DirectionSuffix,UnitDescr,ZipCode)) #Removing Non relevant Vars
+#Splitting
+chunk <- 10000
+n <- nrow(cleaned_condo_units)
+r <- rep(1:ceiling(n/chunk), each=chunk)[1:n]
+d <- split(cleaned_condo_units, r)
+#Applying Factors 
+d <- lapply(d, function(x){
+  x$UnitType = as.factor(x$UnitType)
+  x$UnitQuality = as.factor(x$UnitQuality) 
+  x$UnitLoc = as.factor(x$UnitLoc)
+  x$UnitOfMeasure = as.factor(x$UnitOfMeasure)
+  x$Condition = as.factor(x$Condition)
+  x$OtherRoom = as.factor(x$OtherRoom) 
+  x$ViewMountain = as.factor(x$ViewMountain)
+ x$ViewLakeRiver = as.factor(x$ViewLakeRiver)
+ x$ViewCityTerritorial = as.factor(x$ViewCityTerritorial)
+ x$ViewPugetSound = as.factor(x$ViewPugetSound)
+ x$ViewLakeWaSamm = as.factor(x$ViewLakeWaSamm)
+ x$PkgOpen = as.factor(x$PkgOpen)
+ x$PkgCarport = as.factor(x$PkgCarport)
+ x$PkgBasement = as.factor(x$PkgBasement)
+ x$PkgBasementTandem = as.factor(x$PkgBasementTandem)
+ x$PkgGarage = as.factor(x$PkgGarage)
+ x$PkgGarageTandem = as.factor(x$PkgGarageTandem)
+ x$PkgOtherType = as.factor(x$PkgOtherType)
+ x$Grade = as.factor(x$Grade)
+  return(x)
+})
+#Merging Data Partitions
+cleaned_condo_units = bind_rows(d)
+c_units = test(cleaned_condo_units, "TopFloor", "Fireplace","EndUnit")
+```
+
+```{r joinAccessory, eval = FALSE}
+# Join sales and accessory
+acc_df <- left_join(final_df, accessory)
+# Keep records for houses that either have no record of accessory or accessory's date value was before 
+# the sale of the house
+# If there is one obs for a mm_key 12345-12345 with sales year 2012 value date 2015, this obs is removed
+acc_df <- acc_df %>%
+  group_by(mm_key, DocumentDate) %>%
+  mutate(DateValued = ifelse(DateValued <= DocumentDate, DateValued, NA))%>% 
+  distinct()
+# If there were multiple changes between sales, only keep the most recent one
+acc_df <- acc_df %>%
+  group_by(mm_key, DocumentDate) %>%
+  filter((DateValued == max(DateValued) | is.na(DateValued))) %>% 
+  distinct()
+  
+# Check for duplicates
+acc_df %>%
+  group_by(mm_key) %>%
+  filter(n() > 1) %>%
+  arrange(mm_key)
+acc_df %>%
+  group_by(mm_key) %>%
+  filter(n() > 1) %>%
+  arrange(mm_key)
+```
