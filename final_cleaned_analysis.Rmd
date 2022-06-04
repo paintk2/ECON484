@@ -144,7 +144,7 @@ final_df <- sales %>%
 final_df <- final_df %>%
   left_join(parcel, by="mm_key")
   # 311526 obs.
-save(final_df, file="sales.Rda")
+#save(final_df, file="sales.Rda")
 # # Tests to see if there are duplicate mm_keys that do NOT
 # # have distinct sale dates
 # test <- final_df %>%
@@ -193,27 +193,24 @@ save(final_df, file="sales.Rda")
 
 ```{r Clean Data}
 # Drop columns with only one level
-final_df <- final_df[, sapply(lapply(final_df, unique), length) > 1]
-
-# drop mm_key after join
-final_df <- subset (final_df, select = -mm_key)
+final_df_1 <- final_df[, sapply(lapply(final_df, unique), length) > 1]
 
 # drop SqFt variables
-final_df <- subset (final_df, select = -c(SqFt1stFloor, SqFtHalfFloor, SqFt2ndFloor, SqFtUpperFloor, SqFtUnfinFull, SqFtUnfinHalf, SqFtTotBasement, SqFtFinBasement))
+final_df_2 <- subset (final_df_1, select = -c(SqFt1stFloor, SqFtHalfFloor, SqFt2ndFloor, SqFtUpperFloor, SqFtUnfinFull, SqFtUnfinHalf, SqFtTotBasement, SqFtFinBasement, mm_key))
 
 # Explore data 
-hist(final_df$SalePrice, breaks = 100000, xlim = c(0, 10000000)) # Data is not normally distributed 
-hist(log(final_df$SalePrice), breaks = 100000) # Better distribution 
+hist(final_df_2$SalePrice, breaks = 100000, xlim = c(0, 10000000)) # Data is not normally distributed 
+hist(log(final_df_2$SalePrice), breaks = 100000) # Better distribution 
 
 # Remove NAs and scale response 
-data_use <- final_df %>% 
+data_use <- final_df_2 %>% 
   ungroup() %>% 
   select(-c(DocumentDate, SaleReason, SaleInstrument, PlatBlock, DistrictName,
             ViewUtilization, YrRenovated, QuarterSection, CurrentZoning)) %>% 
   mutate(ZipCode = ifelse(ZipCode == "", NA, ZipCode)) %>% 
+  mutate(ZipCode = gsub("-", "", ZipCode, fixed = TRUE)) %>% 
   na.omit() %>% 
-  mutate_all(as.numeric) %>% 
-  relocate(SalePrice, .before = YrSold)
+  mutate_all(as.numeric)
 
 data_use$SalePrice <- scale(data_use$SalePrice)
 
@@ -224,14 +221,14 @@ library(corrplot)
 check_cor <- as.data.frame(cor(data_use[, 2:80])) %>% 
   mutate_if(is.numeric, ~round(., 2)) 
   
-corrplot(cor(data_rm[, 2:87]), diag = FALSE, order = "AOE", tl.pos = "td", tl.cex = 1.0, method = "number", type = "upper")
+corrplot(cor(data_use[, 2:80]), diag = FALSE, order = "AOE", tl.pos = "td", tl.cex = 1.0, method = "number", type = "upper")
 
 # drop hioghly correlated and other redundant variables
-the_data <- data_use %>% 
+final_df <- data_use %>% 
   select(-c(CurrentUseDesignation, BldgGrade, FinBasementGrade, Range, Township, Area, SubArea, BldgGradeVar, FpAdditional,
             PcntComplete, AddnlCost))
 # Save data 
-save(the_data, file="sales.Rda")
+save(final_df, file="sales.Rda")
 
 load("sales.Rda")
 
@@ -276,16 +273,21 @@ load("sales.Rda")
 test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
 train_set <- final_df[-test_index,]
 test_set <- final_df[test_index,]
+
 validation_index <- sample(1:nrow(train_set), as.integer(nrow(train_set)*0.2))
 train_set <- final_df[-validation_index,]
 validation_set <- final_df[validation_index,]
+
 # convert to matrix
 train_x <- data.matrix(train_set[, names(train_set) != "SalePrice"])
 train_y <- train_set$SalePrice
+
 test_x <- data.matrix(test_set[, names(test_set) != "SalePrice"])
 test_y <- test_set$SalePrice
+
 validation_x <- data.matrix(validation_set[, names(validation_set) != "SalePrice"])
 validation_y <- validation_set$SalePrice
+
 # Store model name, MSE, and cross validated R2 as dataframe
 result <- data.frame(Model=character(),
                  MSE=double(), 
@@ -307,17 +309,6 @@ result <- unique(rbind(result, data.frame(Model=c("LASSO + LASSO regression"),
                                           CVR2=c(lasso.R2))))
 # print coefficients
 coef(lasso.fit, s = "lambda.min")
-```
-
-```{r LASSO OLS}
-# LASSO model selection and OLS
-# The resulting coefficients will be biased towards 0!
-# Do OLS on LASSO
-pred <- predict(lasso.fit, validation_x, s = 0, type = "response")
-# Get test errors and store results
-result <- unique(rbind(result, data.frame(Model=c("LASSO + OLS"),
-                                          MSE = c(),
-                                          CVR2=c())))
 ```
 
 ```{r Ridge Regression}
@@ -352,50 +343,54 @@ result <- unique(rbind(result, data.frame(Model=c("Ridge regression"),
 
 ```{r DoubleLasso}
 #Double LASSO
-# Step 1) Creating Test and Train sets:
-test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
-train_set <- final_df[-test_index,]
-test_set <- final_df[test_index,]
-train_xall <- data.matrix(train_set[,names(train_set) != "SalePrice" ])
+# # Step 1) Creating Test and Train sets:
+# test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
+# train_set <- final_df[-test_index,]
+# test_set <- final_df[test_index,]
+# train_xall <- data.matrix(train_set[,names(train_set) != "SalePrice" ])
+
+
 #Removing Covariates of Interest from X
-train_x = as.matrix(subset(train_xall,select = -c(SqFtTotLiving))) #We remove our Covariate of Interest
-train_y = train_set$SalePrice #Creating our training set for independant variable
-test_xall <- data.matrix(test_set[,names(train_set) != "SalePrice" ])
+train_x_dl = as.matrix(subset(train_x, select = -c(SqFtTotLiving))) #We remove our Covariate of Interest
+#train_y = train_set$SalePrice #Creating our training set for independant variable
+#test_xall <- data.matrix(test_set[,names(train_set) != "SalePrice" ])
+
 #Removing Covariates of Interest from X
-test_x = as.matrix(subset(test_xall,select = -c(SqFtTotLiving)))
-test_y <- test_set$SalePrice #setting our independent variable to log y 
+test_x_dl = as.matrix(subset(test_x, select = -c(SqFtTotLiving)))
+#test_y <- test_set$SalePrice #setting our independent variable to log y 
+
 #Creating Covariates Set
-covariates_train = as.vector(subset(train_xall,select = c(SqFtTotLiving)))
-covariates_test = as.vector(subset(test_xall,select = c(SqFtTotLiving)))
+covariates_train = as.vector(subset(train_x, select = c(SqFtTotLiving)))
+covariates_test = as.vector(subset(test_x, select = c(SqFtTotLiving)))
+
 #Step 2 Selecting variables that predict outcome:
 library(glmnet)
-n=nrow(train_x) 
-p=ncol(train_x) 
+n=nrow(train_x_dl) 
+p=ncol(train_x_dl) 
 sd1=sd(covariates_train)
 lambda1 = .5*sd1*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
 summary(lambda1) 
 k = 1 
 while(k < 15){ 
-  fitY = glmnet(train_x,as.vector(covariates_train), lambda=lambda1) 
+  fitY = glmnet(train_x_dl,as.vector(covariates_train), lambda=lambda1) 
   ba = coef(fitY, s = lambda1) 
-  ea = predict(fitY,test_x) 
+  ea = predict(fitY,test_x_dl) 
   sda = sd(ea) 
   lambda1 = sda*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
   k = k+1 
 } 
 ba 
 # Step 3: Select variables that predict treatment 
-n=nrow(train_x) 
-p=ncol(train_x)
-t = ncol(test_x)
+n=nrow(train_x_dl) 
+p=ncol(train_x_dl)
+t = ncol(test_x_dl)
 sd1=sd(train_y) 
 lambda1 = .5*sd1*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p))   
-summary(lambda1) 
 k = 1 
 while(k < 15){ 
-  fitT = glmnet(train_x, train_y, lambda=lambda1) 
+  fitT = glmnet(train_x_dl, train_y, lambda=lambda1) 
   ba = coef(fitT, s = lambda1) 
-  ea = predict(fitT,test_x ) 
+  ea = predict(fitT,test_x_dl) 
   sda = sd(ea) 
   lambda1 = sda*(1.1/sqrt(n))* qnorm(1 - (.1/log(n))/(2*p)) 
   k = k+1 
@@ -403,10 +398,28 @@ while(k < 15){
 ba 
 #STEP 3: linear regression with both sets of variables 
 use = union(which(abs(fitY$beta)>0),which(abs(fitT$beta) > 0)) 
-X = cbind(covariates_test,test_x)
+X = cbind(covariates_test,test_x_dl)
 use = c(1,use+1)
 fitr <- lm(test_y~ X[,use], data=final_df) 
 summary(fitr) # show results Coeff est of "covariates test" shows the magnitude of the causal relationship
+
+# OLS using DL
+lasso_feat <- as.data.frame(as.matrix(coef(fitr))) %>%
+  mutate(vars = rownames(.)) %>% 
+  filter(vars != "(Intercept)") %>% 
+  mutate(vars = substr(vars, 9, length(vars))) %>% 
+  filter(vars != "covariates_test") %>% 
+  select(vars)
+
+train_ols_x <- train_set[, (colnames(train_set) %in% lasso_feat$vars) | colnames(train_set) == "SalePrice"]
+
+test_ols_x <- validation_x[, colnames(test_x) %in% lasso_feat$vars]
+
+ols_dl_mod <- lm(SalePrice ~., data = as.data.frame(train_ols_x))
+
+pred_ols_dl <- predict(ols_dl_mod, as.data.frame(validation_x))
+
+mse_ols_dl <- mean((pred_ols_dl - validation_y)^2)
 ```
 
 
@@ -416,43 +429,63 @@ fit.control <- trainControl(method = "cv", number = 10, savePredictions=TRUE)
 gam.spline.fit <- train(SalePrice ~ ., data = train_set, method = "gam", trControl=fit.control, tuneLength = 0)
 gam.spline.fit$result
 train_set[, sapply(lapply(train_set, unique), length) < 2]
-unique(final_df$PrincipalUse)
+
+pred_gam <- predict(gam.spline.fit, test_x)
+
+mse_gam <- mean((pred - test_y)^2)
+
 # result <- unique(rbind(result, data.frame(Model=c("GAM using Splines"),
 #                                           RMSE = c(lasso.RMSE),
 #                                           CVR2=c(R_square))))
 # gives error memory exhaust
 # tyring setting up k-fold cv without caret
-library(gam)
-spline_df <- train_rm[complete.cases(train_rm), ]
-spline_df_x <- spline_df %>% select(-c(SalePrice))
-# Tuning parameter= the bins, suggest some possible values
-number_of_bins = seq(1,8)
-k = 10
-folds = sample( 1:k, nrow(Saletr), replace=TRUE ) 
-cv.errors = matrix( NA, k, length(number_of_bins) )
-for( i in 1:length(number_of_bins)){ # for each number of knots to test
-  
-  smooth <- spline_df_x %>% select_if(negate(is.factor))
-  smooth <- colnames(smooth[, sapply(lapply(smooth, unique), length) > i+2])
-  nonsmooth <- colnames(spline_df_x[ , -which(names(spline_df_x) %in% smooth)])
-  
-  print(smooth)
-  print(nonsmooth)
-  
-  form<-as.formula(
-   paste0("SalePrice~",paste0("s(",smooth,",k=i,bs=\"cr\")",collapse="+"),"+",paste0("",nonsmooth,collapse="+"),collapse=""))
-  
-  
-  for( j in 1:k ){ # for each fold
-    cubicfit = mgcv::gam(data=spline_df[folds!=j,], form,family=gaussian )
-    cubicpred = predict( cubicfit, newdata=spline_df[folds==j,] )
-    cv.errors[j,i] = mean( ( spline_df[folds==j,]$SalePrice - cubicpred )^2 ) }
-  
-}
-cv.errors.mean = apply(cv.errors,2,mean)
-cv.errors.stderr = apply(cv.errors,2,sd)/sqrt(k)
-min.cv.index = which.min( cv.errors.mean )
-one_se_up_value = ( cv.errors.mean+cv.errors.stderr )[min.cv.index] 
+# library(gam)
+# spline_df <- train_rm[complete.cases(train_rm), ]
+# spline_df_x <- spline_df %>% select(-c(SalePrice))
+# # Tuning parameter= the bins, suggest some possible values
+# number_of_bins = seq(1,8)
+# k = 10
+# folds = sample( 1:k, nrow(Saletr), replace=TRUE ) 
+# cv.errors = matrix( NA, k, length(number_of_bins) )
+# for( i in 1:length(number_of_bins)){ # for each number of knots to test
+#   
+#   smooth <- spline_df_x %>% select_if(negate(is.factor))
+#   smooth <- colnames(smooth[, sapply(lapply(smooth, unique), length) > i+2])
+#   nonsmooth <- colnames(spline_df_x[ , -which(names(spline_df_x) %in% smooth)])
+#   
+#   print(smooth)
+#   print(nonsmooth)
+#   
+#   form<-as.formula(
+#    paste0("SalePrice~",paste0("s(",smooth,",k=i,bs=\"cr\")",collapse="+"),"+",paste0("",nonsmooth,collapse="+"),collapse=""))
+#   
+#   
+#   for( j in 1:k ){ # for each fold
+#     cubicfit = mgcv::gam(data=spline_df[folds!=j,], form,family=gaussian )
+#     cubicpred = predict( cubicfit, newdata=spline_df[folds==j,] )
+#     cv.errors[j,i] = mean( ( spline_df[folds==j,]$SalePrice - cubicpred )^2 ) }
+#   
+# }
+# cv.errors.mean = apply(cv.errors,2,mean)
+# cv.errors.stderr = apply(cv.errors,2,sd)/sqrt(k)
+# min.cv.index = which.min( cv.errors.mean )
+# one_se_up_value = ( cv.errors.mean+cv.errors.stderr )[min.cv.index] 
+```
+
+```{r Stepwise}
+library(stats)
+
+mod_all <- lm(SalePrice ~ ., data = train_set)
+
+mod_start <- lm(SalePrice ~ 1, data = train_set)
+
+step_fit <- step(mod_start, scope = formula(mod_all), direction = "both")  
+
+summary(step_fit)
+
+pred_step <- predict(step_fit, validation_x)
+
+mse_step <- mean((pred - validation_y)^2)
 ```
 
 ```{r PCR}
@@ -461,13 +494,16 @@ pcr_mod <- pcr(log(SalePrice) ~., data = train_x, validation = "CV") # try scale
 summary(pcr_mod)
  
 validationplot(pcr_mod, val.type = "MSEP")
+
 pcr_pred <- predict(pcr_mod, final_df[test_index,], ncomp = 100)
-mean(((10^pcr_pred) - test_y)^2)
-# Using features selected by LASSO on PCR and KNN
-lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
-  filter(s1 > 0)
-train_red_x <- train_x[, colnames(train_x) %in% row.names(lasso_feat)]
-test_red_x <- test_x[, colnames(test_x) %in% row.names(lasso_feat)]
+
+mse_pcr <- mean(((10^pcr_pred) - test_y)^2)
+
+# # Using features selected by LASSO on PCR and KNN - didn't end up doing 
+# lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
+#   filter(s1 > 0)
+# train_red_x <- train_x[, colnames(train_x) %in% row.names(lasso_feat)]
+# test_red_x <- test_x[, colnames(test_x) %in% row.names(lasso_feat)]
 ```
 
 ## Data Sets Considered - Not Included 
