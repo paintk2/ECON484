@@ -46,7 +46,7 @@ accessory$DateValued <- as.integer(accessory$DateValued)
 
 ```{r sales}
 # Data Wrangling 
-raw_sales <- read.csv("EXTR_RPSale.csv")
+raw_sales <- read.csv("./data/EXTR_RPSale.csv")
 #change document date to year/date format 
 # remove non-residential buildings
 sales_clean <- raw_sales %>% 
@@ -68,8 +68,7 @@ dim(sales_clean)
 sales <- sales_clean %>%
   mutate(YrSold = as.numeric(substr(DocumentDate, 7, 10))) %>%
   mutate(MoSold = as.factor(substr(DocumentDate, 1, 2))) %>%
-  filter(YrSold >= 2012) %>%
-  select( -c(DocumentDate))
+  filter(YrSold >= 2012)
 
 combineID <- function(df) {
   df %>% 
@@ -79,7 +78,7 @@ combineID <- function(df) {
 sales <- combineID(sales)
 # removing useless information
 sales <- sales %>%
-  select(c(mm_key, YrSold, MoSold, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
+  select(c(mm_key, DocumentDate, YrSold, MoSold, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
 sales$PropertyType <- as.factor(sales$PropertyType)
 sales$PrincipalUse <- as.factor(sales$PrincipalUse)
 sales$SaleInstrument <- as.factor(sales$SaleInstrument)
@@ -87,6 +86,7 @@ sales$SaleReason <- as.factor(sales$SaleReason)
 sales$PropertyClass <- as.factor(sales$PropertyClass)
 
 lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
+sales$DocumentDate <- format(as.Date(sales$DocumentDate, format="%d/%m/%Y"),"%Y")
 sales$AFCurrentUseLand <- lookup[sales$AFCurrentUseLand]
 sales$AFCurrentUseLand[is.na(sales$AFCurrentUseLand)] = 0
 sales$AFCurrentUseLand <- as.factor(sales$AFCurrentUseLand)
@@ -99,7 +99,6 @@ sales$AFHistoricProperty <- as.factor(sales$AFHistoricProperty)
 sales$AFNonProfitUse <-lookup[sales$AFNonProfitUse]
 sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0
 sales$AFNonProfitUse <- as.factor(sales$AFNonProfitUse)
-
 ```
 
 
@@ -318,30 +317,6 @@ save(final_df, file="sales.Rda")
 ```
 
 
-```{r clean analysis, eval = FALSE}
-# Analyzing how to clean the final data
-
-# chekcing of NA
-sapply(final_df, function(x) sum(x == 0))
-# No NA, but for example, there are empty cells in Zipcode when I look at them in view
-# ZipCode: Character -> keep first 5 numbers and factor
-
-# checking of 0s
-sapply(final_df, function(x) sum(x == 0))
-# zipcode: 1 
-# Building grade variation ?? most of non 0 obs are 99
-# SqFt columns: check if their floor count matches
-# SqFtTotLiving: 1
-# Brickstone?? 0-100
-# Do we want to keep Bath 3qtrcount?? or convert them to full count
-# PcntComplete: 311765
-# Obsolescence??
-# PcntNetCondition: mostly 0. Maybe drop b/c Condition column already has information on the condition
-# 
-
-unique(final_df$ZipCode)
-```
-
 ```{r joinAccessory, eval = FALSE}
 # Join sales and accessory
 
@@ -384,12 +359,64 @@ final_df <- subset (final_df, select = -mm_key)
 # drop SqFt variables
 final_df <- subset (final_df, select = -c(SqFt1stFloor, SqFtHalfFloor, SqFt2ndFloor, SqFtUpperFloor, SqFtUnfinFull, SqFtUnfinHalf, SqFtTotBasement, SqFtFinBasement))
 
-# drop other unimportant variables
-final_df <- subset (final_df, select = -c(PcntComplete, AddnlCost, PlatBlock, LevyCode, Area, CurrentZoning))
+# Explore data 
+View(hist(final_df$SalePrice, breaks = 100000, xlim = c(0, 10000000))) # Data is not normally distributed 
+View(hist(log(final_df$SalePrice), breaks = 100000)) # Better distribution 
 
-# bucket columns with too many level RF cannot take variables with more than 53 level
-# or transform to dummies
-colnames(final_df[, sapply(lapply(final_df, unique), length) > 53])
+# Remove NAs and scale response 
+final_df <- final_df %>% 
+  ungroup() %>% 
+  select(-c(ZipCode, DocumentDate, SaleReason, SaleInstrument, 
+            ViewUtilization, YrRenovated, QuarterSection, CurrentZoning)) %>% 
+  mutate(DistrictName = gsub(" ", "", DistrictName, fixed = TRUE)) %>% 
+  mutate(DistrictName = as.numeric(as.factor(DistrictName))) %>% 
+  na.omit() 
+
+final_df$SalePrice <- scale(final_df$SalePrice)
+
+# drop other unimportant variables
+final_df <- subset (final_df, select = -c(PcntComplete, AddnlCost, PlatBlock, LevyCode, Area))
+
+save(final_df, file="sales.Rda")
+
+load("sales.Rda")
+
+# Check for multicollinearity 
+library(car)
+xvar <- final_df %>% select(-c(SalePrice))
+f<-as.formula(
+   paste0("SalePrice~",paste0("",xvar,collapse="+"),collapse=""))
+
+model_all <- lm(f, data=final_df)
+ld.vars <- attributes(alias(model_all)$Complete)$dimnames[[1]]
+drop.col <- gsub('[[:digit:]]+', '', ld.vars)
+
+# remove linearly dependet variables
+final_df2 <- final_df[ , -which(names(final_df) %in% drop.col)]
+
+#run model again
+# xvar <- final_df %>% select(-c(SalePrice))
+# f<-as.formula(
+#    paste0("SalePrice~",paste0("",xvar,collapse="+"),collapse=""))
+# model_all <-lm(f, data=final_df)
+vif_values <- vif(model_all)           #create vector of VIF values
+
+barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue") #create horizontal bar chart to display each VIF value
+
+abline(v = 5, lwd = 3, lty = 2)    #add vertical line at 5 as after 5 there is severe correlation
+
+data_x <- final_df %>% select(-c(SalePrice))                                      # independent variables 
+
+var <- cor(data_x)                                         # independent variables correlation matrix 
+
+var_inv <- ginv(var)                                       # independent variables inverse correlation matrix 
+
+colnames(var_inv) <- colnames(data_x)                      # rename the row names and column names
+rownames(var_inv) <- colnames(data_x)
+
+corrplot(var_inv,method='number',is.corr = F)              # visualize the multicollinearity
+
+# Adding more stuff 
 ```
 
 ```{r test train set up}
