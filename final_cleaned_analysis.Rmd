@@ -303,7 +303,7 @@ result <- data.frame(Model=character(),
 lasso.fit <- cv.glmnet(train_x, train_y, family = "gaussian", alpha = 1, k = 5)
 pred <- predict(lasso.fit, validation_x, s = "lambda.min", type = "response")
 # Get test errors and store results
-lasso.MSE <- sqrt(mean((pred - validation_set$SalePrice)^2))
+lasso.MSE <- mean((pred - validation_set$SalePrice)^2)
 lasso.R2 <- lasso.fit$glmnet.fit$dev.ratio[which(lasso.fit$glmnet.fit$lambda == lasso.fit$lambda.min)]
 result <- unique(rbind(result, data.frame(Model=c("LASSO + LASSO regression"),
                                           MSE = c(lasso.MSE),
@@ -337,7 +337,7 @@ ridge.results <- function(true, predicted, df) {
 ridge.results(train_y, ridge.pred.train, train_set)
 ridge.results(validation_y, ridge.pred.test, validation_set)
 # Model performance metrics
-ridge.mse <- sqrt(mean((ridge.pred.test - validation_set$SalePrice)^2))
+ridge.mse <- mean((ridge.pred.test - validation_set$SalePrice)^2)
 ridge.R2 <- ridge.fit$glmnet.fit$dev.ratio[which(ridge.fit$glmnet.fit$lambda == ridge.fit$lambda.min)]
 result <- unique(rbind(result, data.frame(Model=c("Ridge regression"),
                                           MSE = c(ridge.mse),
