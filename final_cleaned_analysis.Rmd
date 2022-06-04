@@ -424,6 +424,10 @@ pred_ols_dl <- predict(ols_dl_mod, as.data.frame(validation_x))
 
 mse_ols_dl <- mean((pred_ols_dl - validation_y)^2)
 
+SSE <- sum((pred_ols_dl - validation_y)^2)
+SST <- sum((validation_y - mean(validation_y))^2)
+R2_ols_dl <- 1 - SSE / SST
+
 result <- unique(rbind(result, data.frame(Model=c("Double LASSO + OLS"),
                                           MSE = c(mse_ols_dl),
                                           CVR2=c(R2_ols_dl))))
@@ -435,11 +439,19 @@ result <- unique(rbind(result, data.frame(Model=c("Double LASSO + OLS"),
 fit.control <- trainControl(method = "cv", number = 10, savePredictions=TRUE)
 gam.spline.fit <- train(SalePrice ~ ., data = train_set, method = "gam", trControl=fit.control, tuneLength = 0)
 gam.spline.fit$result
-train_set[, sapply(lapply(train_set, unique), length) < 2]
+# train_set[, sapply(lapply(train_set, unique), length) < 2]
 
-pred_gam <- predict(gam.spline.fit, test_x)
+pred_gam <- predict(gam.spline.fit, validation_x)
 
-mse_gam <- mean((pred - test_y)^2)
+mse_gam <- mean((c(pred_gam) - validation_y)^2)
+
+SSE <- sum((c(pred_gam) - validation_y)^2)
+SST <- sum((validation_y - mean(validation_y))^2)
+R2_gam <- 1 - SSE / SST
+
+result <- unique(rbind(result, data.frame(Model=c("GAM Spline"),
+                                          MSE = c(mse_gam),
+                                          CVR2=c(R2_gam))))
 
 # result <- unique(rbind(result, data.frame(Model=c("GAM using Splines"),
 #                                           RMSE = c(lasso.RMSE),
@@ -493,6 +505,14 @@ summary(step_fit)
 pred_step <- predict(step_fit, as.data.frame(validation_x))
 
 mse_step <- mean((pred_step - validation_y)^2)
+
+SSE <- sum((pred_step - validation_y)^2)
+SST <- sum((validation_y - mean(validation_y))^2)
+R2_step <- 1 - SSE / SST
+
+result <- unique(rbind(result, data.frame(Model=c("Step"),
+                                          MSE = c(mse_step),
+                                          CVR2=c(R2_step))))
 ```
 
 ```{r PCR}
@@ -509,12 +529,24 @@ pcr_pred <- predict(pcr_mod, validation_x, ncomp = 47)
 
 mse_pcr <- mean((pcr_pred - as.vector(validation_y))^2)
 
+SSE <- sum((pcr_pred - validation_y)^2)
+SST <- sum((validation_y - mean(validation_y))^2)
+R2_pcr <- 1 - SSE / SST
+
+result <- unique(rbind(result, data.frame(Model=c("Step"),
+                                          MSE = c(mse_pcr),
+                                          CVR2=c(R2_pcr))))
+
 # # Using features selected by LASSO on PCR and KNN - didn't end up doing 
 # lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
 #   filter(s1 > 0)
 # train_red_x <- train_x[, colnames(train_x) %in% row.names(lasso_feat)]
 # test_red_x <- test_x[, colnames(test_x) %in% row.names(lasso_feat)]
 ```
+```{r error}
+result
+```
+
 
 ## Data Sets Considered - Not Included 
 
