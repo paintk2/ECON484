@@ -546,7 +546,7 @@ cntrl <- trainControl(method = "cv", number = 5)
 test_vals <- seq(.00001, .001, by=.0001)
 test_vals <- append(test_vals, c(.005, .01, .05, .1, .5, 1))
 
-lassoGrid <- expand.grid(alpha = 1, lambda = test_vals)
+lassoGrid <- expand.grid(alpha = 1, lambda = seq(.00001, .001, by=.0001))
 
 lasso_mod <- train(x=train_x, y=train_y, method="glmnet", trControl=cntrl, tuneGrid=lassoGrid)
 lasso_mod
@@ -570,41 +570,99 @@ lasso_mod$results$lambda
 ggplot(lasso_mod$results, aes(lambda, RMSE)) + 
   geom_line()
 lassoRMSE <- sqrt(mean(exp(test_y) - lassoPred)^2)
+lassoMSE <- mean(exp(test_y) - lassoPred)^2
+lassoMSE
+
 ```
 
-<!-- ## 7.3 Random forest -->
-<!-- ```{r} -->
-<!-- # trainIndex <- createDataPartition(train_y, p=.5, list=FALSE, times=1) -->
-
-<!-- # train_x1 <- train_x[trainIndex, ] -->
-<!-- # train_y1 <- train_y[trainIndex] -->
-<!-- # train_x2 <- train_x[-trainIndex, ] -->
-<!-- # train_y2 <- train_y[-trainIndex] -->
-
-<!-- cntrl <- trainControl(method = "repeatedcv", number = 5) -->
-<!-- rfGrid <- expand.grid(mtry=10) -->
-
-<!-- # rf_mod <- train(x=train_x1, y=train_y1, method="rf", trControl=cntrl, tuneGrid=rfGrid) -->
-<!-- # rf_mod2 <- train(x=train_x2, ) -->
-<!-- rf_mod <- randomForest(x=train_x, y=train_y, importance=TRUE) -->
-<!-- # rf_mod <- train(x=train_x, y=train_y, method="rf", trControl=cntrl, tuneGrid=rfGrid) -->
-<!-- rf_mod -->
-
-<!-- rfPredict <- exp(predict(rf_mod, test_x)) -->
-
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- rf_mod$results$RMSE -->
-<!-- rfRMSE <- sqrt(mean(exp(test_y) - rfPredict)^2) -->
-<!-- rfRMSE -->
-<!-- ``` -->
 
 
+## 7.3 Random forest
+
+### 7.3.1 Setting up parallelization
+```{r}
+library(foreach)
+library(doParallel)
+library(ranger)
+
+# Creating parallel computing cluster
+ncores <- parallel::detectCores() - 1
+computing_cluster <- parallel::makeCluster(
+  ncores,
+  type="PSOCK"
+)
+computing_cluster
+doParallel::registerDoParallel(cl = computing_cluster)
+foreach::getDoParRegistered()
+#how many workers are available? 
+foreach::getDoParWorkers()
+
+
+# Splitting into 100 folds
+# flds <- createFolds(train_y, k = 10, list = TRUE, returnTrain = FALSE)
+# str(train_x[flds[[1]], ])
+# str(train_y[flds[[1]]])
+rfGrid <- expand.grid(
+  mtry= c(27, 32, 37, 42)
+)
+
+prediction <- foreach(
+  .combine = 'c',
+  .packages = "ranger",
+  mtry=rfGrid$mtry
+  # i = 1:length(flds)
+) %dopar% {
+  # print(i)
+  # rfMod <- ranger::ranger(
+  #   x=train_x[flds[[i]], ],
+  #   y=train_y[flds[[i]]],
+  #   importance = "permutation",
+  #   classification=FALSE,
+  #   verbose = TRUE
+  # )
+  rfMod <- ranger::ranger(
+    x=train_x,
+    y=train_y,
+    # importance = "permutation",
+    classification=FALSE,
+    verbose = TRUE
+  )
+  return(rfMod)
+}
+# prediction
+rfMod <- ranger::ranger(
+  x=train_x,
+  y=train_y,
+  # importance = "permutation",
+  classification=FALSE,
+  verbose = TRUE
+)
+rfMod
+
+parallel::stopCluster(cl = my.cluster)
+```
 
 
 
 
+
+
+```{r}
+final_df$SalePrice
+hist(final_df$SalePrice)
+
+
+skew(final_df$SalePrice)
+qqnorm(final_df$SalePrice)
+qqline(final_df$SalePrice)
+
+sp <- scale(final_df$SalePrice)
+skew(sp)
+qqnorm(sp)
+qqline(sp)
+
+
+```
 
 
 
