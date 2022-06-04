@@ -484,9 +484,9 @@ step_fit <- step(mod_start, scope = formula(mod_all), direction = "both")
 
 summary(step_fit)
 
-pred_step <- predict(step_fit, validation_x)
+pred_step <- predict(step_fit, as.data.frame(validation_x))
 
-mse_step <- mean((pred - validation_y)^2)
+mse_step <- mean((pred_step - validation_y)^2)
 ```
 
 ```{r PCR}
