@@ -390,57 +390,36 @@ f<-as.formula(
 model_all <- lm(f, data=final_df)
 ld.vars <- attributes(alias(model_all)$Complete)$dimnames[[1]]
 drop.col <- gsub('[[:digit:]]+', '', ld.vars)
-
+drop.col
 # remove linearly dependet variables
-final_df2 <- final_df[ , -which(names(final_df) %in% drop.col)]
+# final_df2 <- final_df[ , -which(names(final_df) %in% drop.col)]
 
 #run model again
 # xvar <- final_df %>% select(-c(SalePrice))
 # f<-as.formula(
 #    paste0("SalePrice~",paste0("",xvar,collapse="+"),collapse=""))
 # model_all <-lm(f, data=final_df)
-vif_values <- vif(model_all)           #create vector of VIF values
-
-barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue") #create horizontal bar chart to display each VIF value
-
-abline(v = 5, lwd = 3, lty = 2)    #add vertical line at 5 as after 5 there is severe correlation
-
-data_x <- final_df %>% select(-c(SalePrice))                                      # independent variables 
-
-var <- cor(data_x)                                         # independent variables correlation matrix 
-
-var_inv <- ginv(var)                                       # independent variables inverse correlation matrix 
-
-colnames(var_inv) <- colnames(data_x)                      # rename the row names and column names
-rownames(var_inv) <- colnames(data_x)
-
-corrplot(var_inv,method='number',is.corr = F)              # visualize the multicollinearity
+# vif_values <- vif(model_all)           #create vector of VIF values
+# 
+# barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue") #create horizontal bar chart to display each VIF value
+# 
+# abline(v = 5, lwd = 3, lty = 2)    #add vertical line at 5 as after 5 there is severe correlation
+# 
+# data_x <- final_df %>% select(-c(SalePrice))                                      # independent variables 
+# 
+# var <- cor(data_x)                                         # independent variables correlation matrix 
+# 
+# var_inv <- ginv(var)                                       # independent variables inverse correlation matrix 
+# 
+# colnames(var_inv) <- colnames(data_x)                      # rename the row names and column names
+# rownames(var_inv) <- colnames(data_x)
+# 
+# corrplot(var_inv,method='number',is.corr = F)              # visualize the multicollinearity
 
 # Adding more stuff 
 ```
 
 ```{r test train set up}
-# Explore data 
-View(hist(final_df$SalePrice, breaks = 100000, xlim = c(0, 10000000))) # Data is not normally distributed 
-View(hist(log(final_df$SalePrice), breaks = 100000)) # Better distribution 
-
-# Remove NAs and scale response 
-final_df <- final_df %>% 
-  ungroup() %>% 
-  select(-c(mm_key, ZipCode, DocumentDate, PrincipalUse, SaleReason, SaleInstrument, 
-            ViewUtilization, YrRenovated, QuarterSection, CurrentZoning, PropType)) %>% 
-  mutate(DistrictName = gsub(" ", "", DistrictName, fixed = TRUE)) %>% 
-  mutate(DistrictName = as.numeric(as.factor(DistrictName))) %>% 
-  na.omit() 
-
-final_df$SalePrice <- scale(final_df$SalePrice)
-
-# Check for multicollinearity 
-
-# Adding more stuff 
-
-
-
 # use validations set to compare different models
 # use test set to do final analysis on the selected model
 test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
