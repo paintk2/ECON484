@@ -490,15 +490,18 @@ mse_step <- mean((pred_step - validation_y)^2)
 ```
 
 ```{r PCR}
-# PCR
-pcr_mod <- pcr(log(SalePrice) ~., data = train_x, validation = "CV") # try scale = T
+library(pls)
+library(class)
+
+pcr_mod <- pcr(SalePrice ~., data = train_set, validation = "CV") 
+
 summary(pcr_mod)
  
 validationplot(pcr_mod, val.type = "MSEP")
 
-pcr_pred <- predict(pcr_mod, final_df[test_index,], ncomp = 100)
+pcr_pred <- predict(pcr_mod, validation_x, ncomp = 47)
 
-mse_pcr <- mean(((10^pcr_pred) - test_y)^2)
+mse_pcr <- mean((pcr_pred - as.vector(validation_y))^2)
 
 # # Using features selected by LASSO on PCR and KNN - didn't end up doing 
 # lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
