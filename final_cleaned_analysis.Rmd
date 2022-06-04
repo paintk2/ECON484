@@ -208,7 +208,7 @@ data_use <- final_df_2 %>%
   ungroup() %>% 
   select(-c(DocumentDate, SaleReason, SaleInstrument, PlatBlock, DistrictName,
             ViewUtilization, YrRenovated, QuarterSection, CurrentZoning)) %>% 
-  mutate(ZipCode = ifelse(ZipCode == "", NA, ZipCode)) %>% 
+  mutate(ZipCode = ifelse(ZipCode == "", 10000, ZipCode)) %>% 
   mutate(ZipCode = gsub("-", "", ZipCode, fixed = TRUE)) %>% 
   na.omit() %>% 
   mutate_all(as.numeric)
