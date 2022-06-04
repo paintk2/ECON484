@@ -46,65 +46,59 @@ accessory$DateValued <- as.integer(accessory$DateValued)
 
 ```{r sales}
 # Data Wrangling 
-raw_sales <- read.csv("./data/EXTR_RPSale.csv")
-
+raw_sales <- read.csv("EXTR_RPSale.csv")
 #change document date to year/date format 
 # remove non-residential buildings
 sales_clean <- raw_sales %>% 
   filter(PropertyType %in% c(10, 11, 12, 13, 14, 18, 19, 2, 3, 6)) %>% 
-  filter(PrincipalUse == 6) %>% 
-  mutate(DocumentDate = as.numeric(substr(DocumentDate, 7, 10)))
-  # mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
+  filter(PrincipalUse == 6) %>%
+  # filter(SaleReason %in% c(0, 1)) %>%
+  filter(SalePrice > 0) %>%
+  filter(!SaleInstrument %in% c(26, 28))
+dim(sales_clean)
 
-
+sales_clean <- sales_clean[sales_clean$SaleWarning == " ", ]
+ggplot(sales_clean, aes(as.factor(SaleInstrument), SalePrice)) +
+  geom_boxplot() + 
+  coord_cartesian(ylim = c(0, 50000)) 
+dim(sales_clean)
+# mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y")))
 # sales <- sales_clean %>% 
 #   filter(DocumentDate >= "2012-01-01")
 sales <- sales_clean %>%
-  filter(DocumentDate >= 2012)
-  
+  mutate(YrSold = as.numeric(substr(DocumentDate, 7, 10))) %>%
+  mutate(MoSold = as.factor(substr(DocumentDate, 1, 2))) %>%
+  filter(YrSold >= 2012) %>%
+  select( -c(DocumentDate))
 
-  # not including mobile homes, check 6 
-
-# Combines Major and Minor columns
 combineID <- function(df) {
   df %>% 
     mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
     select(-c(Major, Minor))
 }
-
 sales <- combineID(sales)
-# test <- sales %>% filter(str_detect(AFForestLand, 'Y'))
-
 # removing useless information
 sales <- sales %>%
-  select(c(mm_key, DocumentDate, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
+  select(c(mm_key, YrSold, MoSold, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
 sales$PropertyType <- as.factor(sales$PropertyType)
 sales$PrincipalUse <- as.factor(sales$PrincipalUse)
 sales$SaleInstrument <- as.factor(sales$SaleInstrument)
 sales$SaleReason <- as.factor(sales$SaleReason)
 sales$PropertyClass <- as.factor(sales$PropertyClass)
 
-# sales %>% distinct(AFNonProfitUse)
-# test <- sales %>% 
-#   group_by(mm_key) %>%
-#   count()
-
-# replace Y,y,N,n,0,1 and NULL values with binary 0's and 1's
 lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0)
 sales$AFCurrentUseLand <- lookup[sales$AFCurrentUseLand]
 sales$AFCurrentUseLand[is.na(sales$AFCurrentUseLand)] = 0
-
+sales$AFCurrentUseLand <- as.factor(sales$AFCurrentUseLand)
 sales$AFForestLand <- lookup[sales$AFForestLand]
 sales$AFForestLand[is.na(sales$AFForestLand)] = 0
-
+sales$AFForestLand <- as.factor(sales$AFForestLand)
 sales$AFHistoricProperty <- lookup[sales$AFHistoricProperty]
 sales$AFHistoricProperty[is.na(sales$AFHistoricProperty)] = 0
-
+sales$AFHistoricProperty <- as.factor(sales$AFHistoricProperty)
 sales$AFNonProfitUse <-lookup[sales$AFNonProfitUse]
 sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0
-# 
-# nrow(test)
-# nrow(sales)
+sales$AFNonProfitUse <- as.factor(sales$AFNonProfitUse)
 
 ```
 
@@ -399,6 +393,27 @@ colnames(final_df[, sapply(lapply(final_df, unique), length) > 53])
 ```
 
 ```{r test train set up}
+# Explore data 
+View(hist(final_df$SalePrice, breaks = 100000, xlim = c(0, 10000000))) # Data is not normally distributed 
+View(hist(log(final_df$SalePrice), breaks = 100000)) # Better distribution 
+
+# Remove NAs and scale response 
+final_df <- final_df %>% 
+  ungroup() %>% 
+  select(-c(mm_key, ZipCode, DocumentDate, PrincipalUse, SaleReason, SaleInstrument, 
+            ViewUtilization, YrRenovated, QuarterSection, CurrentZoning, PropType)) %>% 
+  mutate(DistrictName = gsub(" ", "", DistrictName, fixed = TRUE)) %>% 
+  mutate(DistrictName = as.numeric(as.factor(DistrictName))) %>% 
+  na.omit() 
+
+final_df$SalePrice <- scale(final_df$SalePrice)
+
+# Check for multicollinearity 
+
+# Adding more stuff 
+
+
+
 # use validations set to compare different models
 # use test set to do final analysis on the selected model
 test_index <- sample(1:nrow(final_df), as.integer(nrow(final_df)*0.2))
@@ -624,38 +639,39 @@ min.cv.index = which.min( cv.errors.mean )
 one_se_up_value = ( cv.errors.mean+cv.errors.stderr )[min.cv.index] 
 ```
 
-```{r PCR & Random Forest}
-# Explore data 
-View(hist(final_df$SalePrice, breaks = 100000, xlim = c(0, 10000000))) # Data is not normally distributed 
-View(hist(log(final_df$SalePrice), breaks = 100000)) # Better distribution 
+```{r Random Forest, eval=FALSE}
+# Random Forest 
+library(randomForest)
+# 
+# # Using features selected by LASSO 
+# lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
+#   filter(s1 > 0) 
+#   
+# train_red <- train_rm[, colnames(train_rm) %in% row.names(lasso_feat) | names(train_rm) == "SalePrice"]
 
-# Remove NAs and scale response 
-data_red <- final_df %>% 
-  ungroup() %>% 
-  select(-c(mm_key, ZipCode, DocumentDate, PrincipalUse, SaleReason, SaleInstrument, 
-            ViewUtilization, YrRenovated, QuarterSection, CurrentZoning, PropType)) %>% 
-  mutate(DistrictName = gsub(" ", "", DistrictName, fixed = TRUE)) %>% 
-  mutate(DistrictName = as.numeric(as.factor(DistrictName))) %>% 
-  na.omit() 
+bag.rf <- randomForest(SalePrice ~ ., data = train_set, mtry = 8, importance = T)
 
-data_red$SalePrice <- scale(data_red$SalePrice)
+yhat.bag <- predict(bag.boston , newdata = Boston[-train , ])
+```
 
-# Check for multicollinearity 
+```{r PCR}
+# PCR
+pcr_mod <- pcr(log(SalePrice) ~., data = train_x, validation = "CV") # try scale = T
 
+summary(pcr_mod)
+ 
+validationplot(pcr_mod, val.type = "MSEP")
 
+pcr_pred <- predict(pcr_mod, final_df[test_index,], ncomp = 100)
 
+mean(((10^pcr_pred) - test_y)^2)
 
-test_index <- sample(1:nrow(data_rm), as.integer(nrow(data_rm)*0.2))
-train_rm <- data_rm[-test_index,]
-test_rm <- data_rm[test_index,]
+# Using features selected by LASSO on PCR and KNN
+lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
+  filter(s1 > 0)
 
-train_rm_x <- data.matrix(train_rm[, names(train_rm) != "SalePrice"])
-train_rm_y <- train_rm$SalePrice
-
-test_rm_x <- data.matrix(test_rm[, names(test_rm) != "SalePrice"])
-test_rm_y <- test_rm$SalePrice
-
-# Adding more stuff 
+train_red_x <- train_x[, colnames(train_x) %in% row.names(lasso_feat)]
+test_red_x <- test_x[, colnames(test_x) %in% row.names(lasso_feat)]
 ```
 
 
