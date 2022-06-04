@@ -639,19 +639,44 @@ min.cv.index = which.min( cv.errors.mean )
 one_se_up_value = ( cv.errors.mean+cv.errors.stderr )[min.cv.index] 
 ```
 
-```{r Random Forest, eval=FALSE}
-# Random Forest 
-library(randomForest)
-# 
-# # Using features selected by LASSO 
-# lasso_feat <- as.data.frame(as.matrix(coef(lasso.fit, lasso.fit$lambda.min))) %>%
-#   filter(s1 > 0) 
-#   
-# train_red <- train_rm[, colnames(train_rm) %in% row.names(lasso_feat) | names(train_rm) == "SalePrice"]
+```{r Katt Data CLeaning}
+# Explore data 
+hist(final_df$SalePrice, breaks = 100000, xlim = c(0, 10000000)) # Data is not normally distributed 
+hist(log(final_df$SalePrice), breaks = 100000) # Better distribution 
 
-bag.rf <- randomForest(SalePrice ~ ., data = train_set, mtry = 8, importance = T)
+# Remove NAs and scale response remove: bldggradevar,
+data_red <- final_df %>% 
+  ungroup() %>% 
+  select(-c(mm_key, PlatBlock, ZipCode, DocumentDate, PrincipalUse, SaleReason, SaleInstrument, 
+            ViewUtilization, YrRenovated, QuarterSection, CurrentZoning, PropType)) %>% 
+  mutate(DistrictName = gsub(" ", "", DistrictName, fixed = TRUE)) %>% 
+  mutate(DistrictName = as.numeric(as.factor(DistrictName))) %>% 
+  mutate_all(as.numeric) %>% 
+  na.omit() 
 
-yhat.bag <- predict(bag.boston , newdata = Boston[-train , ])
+data_red$SalePrice <- scale(data_red$SalePrice) # Standardizes response variable 
+
+levels <- as.data.frame(as.matrix(sapply(lapply(data_red, unique), length))) %>% 
+  filter(row.names(.) == "SalePrice" | V1 > 1) # & V1 <= 53
+
+data_rm <- data_red[, colnames(data_red) %in% row.names(levels)]
+
+# Check for multicollinearity 
+library(corrplot)
+
+check_cor <- as.data.frame(cor(data_rm[, 2:87])) %>% 
+  mutate_if(is.numeric, ~round(., 2)) 
+  
+corrplot(cor(data_rm[, 2:87]), diag = FALSE, order = "AOE", tl.pos = "td", tl.cex = 1.0, method = "number", type = "upper")
+
+data_use <- data_rm %>% 
+  select(-c(CurrentUseDesignation, HBUAsIfVacant, SqFt2ndFloor, BldgGrade, SqFt1stFloor, SqFtFinBasement, 
+            FinBasementGrade, Range, Township, Area, SubArea, LevyCode, BldgGradeVar))
+
+# Split train and test 
+test_index <- sample(1:nrow(data_use), as.integer(nrow(data_use)*0.2))
+train_rm <- data_use[-test_index,]
+test_rm <- data_use[test_index,]
 ```
 
 ```{r PCR}
