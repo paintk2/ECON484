@@ -10,14 +10,15 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r packages}
-library(tidyverse, quietly = T)
-library(stringr, quietly = T)
-library(fastDummies, quietly = T)
-library(glmnet, quietly = T)
-library(glue, quietly = T)
-library(splines, quietly = T)
-library(mgcv, quietly = T)
-library(caret, quietly = T)
+suppressPackageStartupMessages(library(tidyverse, quietly = T))
+suppressPackageStartupMessages(library(stringr, quietly = T))
+suppressPackageStartupMessages(library(fastDummies, quietly = T))
+suppressPackageStartupMessages(library(glmnet, quietly = T))
+suppressPackageStartupMessages(library(glue, quietly = T))
+suppressPackageStartupMessages(library(splines, quietly = T))
+suppressPackageStartupMessages(library(mgcv, quietly = T))
+suppressPackageStartupMessages(library(caret, quietly = T))
+suppressPackageStartupMessages(library(corrplot, quietly = T))
 ```
 ## Data Used in Final Analysis  
 
