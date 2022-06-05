@@ -19,6 +19,7 @@ suppressPackageStartupMessages(library(splines, quietly = T))
 suppressPackageStartupMessages(library(mgcv, quietly = T))
 suppressPackageStartupMessages(library(caret, quietly = T))
 suppressPackageStartupMessages(library(corrplot, quietly = T))
+suppressPackageStartupMessages(library(dplyr, quietly = T))
 ```
 ## Data Used in Final Analysis  
 
@@ -44,8 +45,15 @@ dim(sales_clean)
 #   filter(DocumentDate >= "2012-01-01")
 sales <- sales_clean %>%
   mutate(YrSold = as.numeric(substr(DocumentDate, 7, 10))) %>%
-  mutate(MoSold = as.factor(substr(DocumentDate, 1, 2))) %>%
-  filter(YrSold >= 2012)
+  mutate(MoSold = as.numeric(substr(DocumentDate, 1, 2))) %>%
+  filter(YrSold >= 2012) %>%
+  mutate(Summer = if_else(
+    MoSold >= 5 & MoSold <= 9, 1, 0
+  )) %>%
+  mutate(Pandemic = if_else(
+    YrSold >= 2020, 1, 0
+  ))
+
 combineID <- function(df) {
   df %>% 
     mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
@@ -74,6 +82,8 @@ sales$AFHistoricProperty <- as.factor(sales$AFHistoricProperty)
 sales$AFNonProfitUse <-lookup[sales$AFNonProfitUse]
 sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0
 sales$AFNonProfitUse <- as.factor(sales$AFNonProfitUse)
+sales$Summer <- as.factor(sales$Summer)
+sales$Pandemic <- as.factor(sales$Pandemic)
 ```
 
 
