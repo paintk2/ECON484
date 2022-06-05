@@ -62,7 +62,7 @@ combineID <- function(df) {
 sales <- combineID(sales)
 # removing useless information
 sales <- sales %>%
-  select(c(mm_key, DocumentDate, YrSold, MoSold, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass))
+  select(c(mm_key, DocumentDate, YrSold, MoSold, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass, Summer, Pandemic))
 sales$PropertyType <- as.factor(sales$PropertyType)
 sales$PrincipalUse <- as.factor(sales$PrincipalUse)
 sales$SaleInstrument <- as.factor(sales$SaleInstrument)
