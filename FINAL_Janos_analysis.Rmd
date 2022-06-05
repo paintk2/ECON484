@@ -1,0 +1,735 @@
+---
+title: "Exploration, Cleaning, Analysis"
+author: "Janos"
+date: '2022-05-31'
+output: 
+  html_document: 
+    keep_md: yes
+---
+ctr + alt + i makes code segments
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache = TRUE, cache.lazy = FALSE)
+rstudioapi::writeRStudioPreference("data_viewer_max_columns", 300L)
+```
+
+# 1. Loading & Exploring Data
+
+## Loading libraries and data into R
+
+```{r, warning=FALSE}
+library(MASS)
+library(tidyverse)
+library(stringr)
+library(knitr)
+library(ggplot2)
+library(gridExtra)
+library(plyr)
+library(glmnet)
+# library(xgboost)
+
+library(corrplot)
+library(caret)
+library(randomForest)
+library(psych)
+library(dplyr)
+select = dplyr::select
+```
+
+
+<!-- ## Loading Data -->
+<!-- ```{r sales} -->
+<!-- # Data Wrangling  -->
+<!-- raw_sales <- read.csv("./data/EXTR_RPSale.csv") -->
+
+<!-- #change document date to year/date format  -->
+<!-- # remove non-residential buildings -->
+<!-- sales_clean <- raw_sales %>%  -->
+<!--   filter(PropertyType %in% c(10, 11, 12, 13, 14, 18, 19, 2, 3, 6)) %>%  -->
+<!--   filter(PrincipalUse == 6) %>% -->
+<!--   # filter(SaleReason %in% c(0, 1)) %>% -->
+<!--   filter(SalePrice > 0) %>% -->
+<!--   filter(!SaleInstrument %in% c(26, 28)) -->
+<!-- dim(sales_clean) -->
+
+<!-- sales_clean <- sales_clean[sales_clean$SaleWarning == " ", ] -->
+<!-- ggplot(sales_clean, aes(as.factor(SaleInstrument), SalePrice)) + -->
+<!--   geom_boxplot() +  -->
+<!--   coord_cartesian(ylim = c(0, 50000))  -->
+
+<!-- dim(sales_clean) -->
+<!--   # mutate(DocumentDate = as.Date(DocumentDate, format = c("%m/%d/%Y"))) -->
+
+<!-- # sales <- sales_clean %>%  -->
+<!-- #   filter(DocumentDate >= "2012-01-01") -->
+<!-- sales <- sales_clean %>% -->
+<!--   mutate(YrSold = as.numeric(substr(DocumentDate, 7, 10))) %>% -->
+<!--   mutate(MoSold = as.factor(substr(DocumentDate, 1, 2))) %>% -->
+<!--   filter(YrSold >= 2012) %>% -->
+<!--   select( -c(DocumentDate)) -->
+
+<!--   # not including mobile homes, check 6  -->
+
+<!-- # Combines Major and Minor columns -->
+<!-- combineID <- function(df) { -->
+<!--   df %>%  -->
+<!--     mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%  -->
+<!--     select(-c(Major, Minor)) -->
+<!-- } -->
+
+<!-- sales <- combineID(sales) -->
+
+<!-- # removing useless information -->
+<!-- sales <- sales %>% -->
+<!--   select(c(mm_key, YrSold, MoSold, SalePrice, PropertyType, PrincipalUse, SaleInstrument, AFForestLand, AFCurrentUseLand, AFNonProfitUse, AFHistoricProperty, SaleReason, PropertyClass)) -->
+<!-- sales$PropertyType <- as.factor(sales$PropertyType) -->
+<!-- sales$PrincipalUse <- as.factor(sales$PrincipalUse) -->
+<!-- sales$SaleInstrument <- as.factor(sales$SaleInstrument) -->
+<!-- sales$SaleReason <- as.factor(sales$SaleReason) -->
+<!-- sales$PropertyClass <- as.factor(sales$PropertyClass) -->
+
+<!-- # sales %>% distinct(AFNonProfitUse) -->
+<!-- # test <- sales %>%  -->
+<!-- #   group_by(mm_key) %>% -->
+<!-- #   count() -->
+
+<!-- # replace Y,y,N,n,0,1 and NULL values with binary 0's and 1's -->
+<!-- lookup <- c("Y" = 1, "y" = 1, "1" = 1, "N" = 0, "n" = 0, "0" = 0) -->
+<!-- sales$AFCurrentUseLand <- lookup[sales$AFCurrentUseLand] -->
+<!-- sales$AFCurrentUseLand[is.na(sales$AFCurrentUseLand)] = 0 -->
+<!-- sales$AFCurrentUseLand <- as.factor(sales$AFCurrentUseLand) -->
+
+
+<!-- sales$AFForestLand <- lookup[sales$AFForestLand] -->
+<!-- sales$AFForestLand[is.na(sales$AFForestLand)] = 0 -->
+<!-- sales$AFForestLand <- as.factor(sales$AFForestLand) -->
+
+<!-- sales$AFHistoricProperty <- lookup[sales$AFHistoricProperty] -->
+<!-- sales$AFHistoricProperty[is.na(sales$AFHistoricProperty)] = 0 -->
+<!-- sales$AFHistoricProperty <- as.factor(sales$AFHistoricProperty) -->
+
+<!-- sales$AFNonProfitUse <-lookup[sales$AFNonProfitUse] -->
+<!-- sales$AFNonProfitUse[is.na(sales$AFNonProfitUse)] = 0 -->
+<!-- sales$AFNonProfitUse <- as.factor(sales$AFNonProfitUse) -->
+<!-- #  -->
+<!-- # nrow(test) -->
+<!-- # nrow(sales) -->
+<!-- # str(sales) -->
+
+<!-- ``` -->
+
+<!-- ```{r residential} -->
+<!-- resBldg <- read.csv("./data/EXTR_ResBldg.csv") -->
+<!-- resBldg <- combineID(resBldg) -->
+
+<!-- # removing useless -->
+<!-- resBldg <- resBldg %>% -->
+<!--   select( -c(Address, BuildingNumber, Fraction, DirectionPrefix, StreetName, StreetType, DirectionSuffix, )) %>%  -->
+<!--   mutate(DaylightBasement = ifelse(tolower(DaylightBasement) == "y", 1, 0)) %>% -->
+<!--   mutate(ViewUtilization = ifelse(tolower(ViewUtilization) == "y", 1, 0)) -->
+
+<!-- # resBldg$BldgGrade <- as.factor(resBldg$BldgGrade) -->
+<!-- # resBldg$FinBasementGrade <-as.factor(resBldg$FinBasementGrade) -->
+<!-- resBldg$DaylightBasement <- -->
+<!--   as.factor(resBldg$DaylightBasement)  -->
+<!-- resBldg$HeatSystem <- as.factor(resBldg$HeatSystem) -->
+<!-- # checking for ordinality of heatsystem -->
+<!-- # ggplot(df, aes(HeatSystem, SalePrice)) + geom_point() -->
+<!-- resBldg$HeatSource <- as.factor(resBldg$HeatSource) -->
+<!-- # ggplot(df, aes(HeatSource, SalePrice)) + geom_boxplot() -->
+<!-- resBldg$ViewUtilization <- as.factor(resBldg$ViewUtilization) -->
+
+
+<!-- # str(resBldg) -->
+<!-- ``` -->
+
+<!-- ### Parcel Data -->
+<!-- ```{r parcel, warning=FALSE} -->
+<!-- parcel <- read.csv("./data/EXTR_Parcel.csv") -->
+
+<!-- parcel_red <- parcel %>%  -->
+<!--   select(-c(PropName, PlatName, PlatLot, SpecArea, SpecSubArea))  #plat lot ?? check  -->
+
+<!-- rm(parcel) -->
+
+<!-- parcel_red$Area <- as.factor(parcel_red$Area) -->
+
+<!-- parcel_red$SubArea <- as.factor(parcel_red$SubArea) -->
+
+<!-- parcel_red$HBUAsIfVacant <- as.factor(parcel_red$HBUAsIfVacant) -->
+
+<!-- parcel_red$HBUAsImproved <- as.factor(parcel_red$HBUAsImproved) -->
+
+<!-- parcel_red[, 18:24] <- lapply(parcel_red[, 18:24], function(y) {as.factor(y)}) -->
+
+<!-- parcel_red <- parcel_red %>%  -->
+<!--   mutate(Unbuildable = ifelse(Unbuildable == "True", 1, 0)) -->
+
+<!-- # parcel_red[, 27:36] <- lapply(parcel_red[, 27:36], function(y) {as.factor(y)})  -->
+
+<!-- parcel_red[, 39:41] <- lapply(parcel_red[, 39:41], function(y) {as.factor(y)}) -->
+
+<!-- parcel_red[, 44:46] <- lapply(parcel_red[, 44:46], function(y) {as.factor(y)}) -->
+
+<!-- parcel_red$HistoricSite <- as.factor(parcel_red$HistoricSite) -->
+
+<!-- parcel_red$CurrentUseDesignation <- as.factor(parcel_red$CurrentUseDesignation) -->
+
+<!-- parcel_red[, 42:43] <- lapply(parcel_red[, 42:43], function(y) {ifelse (y == "Y", 1, y = as.factor(0))}) -->
+
+<!-- parcel_red[, 48:49] <- lapply(parcel_red[, 48:49], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}}) -->
+
+<!-- parcel_red[, 74:75] <- lapply(parcel_red[, 74:75], function(y) {if (y == "Y") { y = 1} else {0}}) -->
+
+<!-- parcel_half <- parcel_red %>%  -->
+<!--   select(NbrBldgSites:OtherProblems) -->
+
+<!-- parcel_red <- parcel_red %>%  -->
+<!--   select(Major:OtherNuisances) -->
+
+<!-- parcel_half[, 3:5] <- lapply(parcel_half[, 3:5], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}}) -->
+
+<!-- parcel_half[, 8:27] <- lapply(parcel_half[, 8:27], function(y) {if (y == "Y") { y = as.factor(1)} else {y = as.factor(0)}}) -->
+
+<!-- # rm(ls(parcel_half, parcel_red)) -->
+
+<!-- parcel <- cbind(parcel_red, parcel_half) -->
+<!-- parcel$WfntLocation <- as.factor(parcel$WfntLocation) -->
+
+<!-- parcel <- parcel %>%  -->
+<!--   mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>%  -->
+<!--   select(-c(Major, Minor)) -->
+<!-- ``` -->
+
+<!-- ### Merging Datasets -->
+<!-- ```{r} -->
+<!-- final_df <- sales %>% -->
+<!--   filter(SalePrice > 0 & !is.na(SalePrice)) %>%  -->
+<!--   left_join(resBldg, by="mm_key") %>% -->
+<!--   group_by(mm_key, YrSold) %>% -->
+<!--   filter(YrSold >= YrBuilt) %>% -->
+<!--   filter(YrBuilt == max(YrBuilt)) -->
+<!--   # 311526 obs. -->
+
+<!-- final_df <- final_df %>% -->
+<!--   left_join(parcel, by="mm_key") -->
+<!--   # 311526 obs. -->
+<!-- final_df$mm_key <- NULL -->
+
+<!-- # test <- final_df -->
+<!-- # test <- test %>% # Testing that yrbuilt < yrrenovated -->
+<!-- #   filter(YrRenovated > 0) %>% -->
+<!-- #   mutate(diff=YrRenovated - YrBuilt) %>% -->
+<!-- #   filter(diff <= 0) -->
+<!-- df <- final_df -->
+<!-- # rm(list=setdiff(ls(), "df")) -->
+<!-- ``` -->
+
+```{r}
+load("df.Rda")
+```
+
+
+Checking data size, structure, and column dtypes for
+the first 10 variables to see if the data has loaded correctly
+```{r, }
+dim(df)
+str(df[,c(1:10), 129])
+```
+
+# 2. Data Exploration
+
+## 2.1 Response variable: Sale Price
+```{r}
+# Does not include Sales over 4 million dollars 
+ggplot(data=df[!is.na(df$SalePrice),], 
+       aes(x=SalePrice)) + 
+  geom_histogram(fill="blue", binwidth= 50000) + 
+  scale_x_continuous(limits = c(0, 4000000))
+```
+```{r}
+summary(df$SalePrice)
+```
+
+
+# 3. Missing data, factorizing
+
+## 3.1 Completeness
+```{r}
+na_count <-sapply(df, function(y) sum(length(which(is.na(y)))))
+na_count <- data.frame(na_count)
+cols_null <- nrow(na_count %>% filter(na_count > 0))
+cat('Number of columns with null values: ', cols_null)
+
+sum(df == "")    ############# WHY IS THIS HERE? <<<<<<
+empty_count <-sapply(df, function(y) sum(length(which(y == ""))))
+empty_count <- data.frame(empty_count)
+cols_empty <- nrow(empty_count %>% filter(empty_count > 0))
+cat('Number of columns with empty values: ', cols_empty)
+```
+
+## 3.2 Removing unnecessary columns
+
+```{r}
+# removes columns with only 1 value
+df <- Filter(function(x)(length(unique(x))>1), df)
+
+# df <- df %>%
+#   mutate(ZipCode = ifelse(ZipCode == "", FALSE, TRUE))
+# ggplot(df, aes(as.factor(ZipCode), SalePrice)) +
+#   geom_point() +
+#   geom_smooth(method = "lm", aes(group=1))
+# ggplot(df, aes(as.factor(ZipCode), SalePrice)) +
+#   geom_boxplot() +
+#   coord_cartesian(ylim = c(0, 1000000))
+
+
+
+
+# removing columns without useful information
+# perhaps keep CurrentZoning ----------------------
+df <- df %>%
+  select(-c(BldgNbr, ZipCode, PlatBlock, QuarterSection, Area, SubArea, CurrentZoning, HBUAsImproved, HBUAsIfVacant, LotDepthFactor, Topography, LevyCode))
+ncol(df)
+```
+## 3.3 Adding location key
+```{r}
+# df$LevyCode <- as.factor(df$LevyCode)
+# <- range-township-section
+
+df <- df %>%
+  mutate(loc_key = paste0(Range, '-', Township, '-', Section)) %>%
+select(-c(Range, Township, Section))
+# 
+# table(df$loc_key)
+
+# NOTE ------- Using Levy codes & district name = collinearity when the district has only 1 levy code!!!!!
+# NOTE ------- DistrictName may NOT be useful b/c of loc_key--
+```
+
+## 3.4 Changing some years into factors
+```{r}
+# str(df)
+
+# Feature Engineering
+df$isNew <- ifelse(df$YrSold == df$YrBuilt, 1, 0)
+df$isRenovated <- ifelse((df$YrRenovated == 0 | df$YrRenovated > df$YrSold), 0, 1)
+
+df$age <- as.integer(df$YrSold - ifelse(df$isRenovated == 1, df$YrRenovated, df$YrBuilt))
+df$YrRenovated <- ifelse(df$YrRenovated == 0, df$YrBuilt, df$YrRenovated)
+
+# df$YrSold <- as.factor(df$YrSold)
+# unique(as.factor(df$YrRenovated))
+#seeing if there is any pattern/ whether truncation is possible
+# ggplot(df, aes(as.factor(YrBuilt), SalePrice)) + 
+#   geom_bar(position="dodge", stat="summary", fun="median")
+# occurrences
+# ggplot(df, aes(x=as.factor(YrBuilt))) + 
+#   geom_histogram(binwidth=5)
+# Binning into triennium bins
+# df$YrBuilt <- as.factor((findInterval(df$YrBuilt, seq(1900, 2023, 5)) - 1) * 5 + 1900)
+# df$YrRenovated <- as.factor((findInterval(df$YrRenovated, seq(1900, 2023, 5)) - 1) * 5 + 1900)
+
+# ggplot(mapping=aes(df$YrRenovated)) + 
+#   geom_histogram(stat="count")
+# ggplot(df, aes(YrBuilt, SalePrice)) + 
+#   geom_bar(position="dodge", stat="summary", fun="median")
+
+# unique(df$YrBuilt)
+# str(df$YrBuilt)
+
+```
+
+# 4. Visualizing important vars
+
+## 4.1 Correlation
+```{r}
+numericVars <- which(sapply(df, is.numeric)) # indices 
+numericVarNames <- names(numericVars) # saving names
+cat('Number of Numeric vars: ', length(numericVars))
+corr <- cor(df[numericVars], use="pairwise.complete.obs")
+
+cor_sorted <- as.matrix(sort(corr[,'SalePrice'], decreasing = TRUE))
+CorHigh <- names(which(apply(cor_sorted, 1, function(x) abs(x)>0.2)))
+corr <- corr[CorHigh, CorHigh]
+corrplot.mixed(corr, tl.col="black", tl.pos = "lt", tl.cex = 0.7,cl.cex = .7, number.cex=.7)
+```
+
+## 4.2 Random Forest for var importance
+```{r, eval=FALSE}
+set.seed(543)
+str(df)
+# df$LevyCode <- as.character(df$LevyCode)
+train_idx <- sample(seq_len(nrow(df)), size=10000)
+quick_sample <- df[train_idx, ]
+quick_rf <- randomForest(SalePrice ~ ., data=quick_sample, ntree=100, importance=TRUE)
+
+i_scores <- importance(quick_rf)
+i_df <- data.frame(Variables = row.names(i_scores), MSE = i_scores[, 1])
+i_df <- i_df[order(i_df$MSE, decreasing=TRUE), ]
+ggplot(i_df[1:20, ], aes(x=reorder(Variables, MSE), y=MSE)) + 
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  theme_minimal()
+
+# df$LevyCode <- as.factor(df$LevyCode)
+```
+
+## 4.3 Living Area
+```{r}
+attach(df)
+p1 <- ggplot(data= df, aes(x=SqFtTotLiving)) +
+  geom_density()
+p2 <- ggplot(data= df, aes(x=SqFt1stFloor)) + 
+  geom_density()
+p3 <- ggplot(data= df, aes(x=SqFtHalfFloor)) + 
+  geom_density()
+p4 <- ggplot(data= df, aes(x=SqFt2ndFloor)) + 
+  geom_density()
+p5 <- ggplot(data= df, aes(x=SqFtUpperFloor)) + 
+  geom_density()
+grid.arrange(p1, p2, p3, p4, p5)
+cor(SqFtTotLiving, (SqFt1stFloor + SqFtHalfFloor + SqFt2ndFloor+ SqFtUpperFloor))
+
+
+```
+
+
+# 5 Feature engineering
+
+## 5.1 Bathrooms
+```{r}
+df$wtdBathrooms <- df$BathFullCount + (df$Bath3qtrCount*.75) + (df$BathHalfCount *.5)
+ggplot(df, aes(as.factor(wtdBathrooms), SalePrice)) +
+  geom_point() + 
+  geom_smooth(method = "lm", aes(group=1)) + 
+  coord_cartesian(ylim = c(0, 4000000)) 
+```
+
+## 5.2 House Age
+```{r}
+# this feature engineering happens in 3.4 before binning dates
+```
+## 5.3 Square Footage
+```{r}
+df$FpTot <- df$FpAdditional + df$FpFreestanding + df$FpMultiStory + df$FpSingleStory
+# df$FpFreestanding <- NULL # So no exact multi...
+
+```
+
+## 5.4 Checking Correlations
+```{r}
+
+cor(df$SqFtTotBasement, (df$SqFtFinBasement + SqFtGarageBasement))
+```
+
+
+
+# 6 Prepping for modelling
+
+## 6.0 Removing Outliers
+```{r}
+df <- df %>%
+  filter(SalePrice > 20000)
+ggplot(df, aes(SqFtTotLiving, SalePrice)) + 
+  geom_point() + 
+  ylim(c(0, 300000))
+# Narrowing scope of model because I cannot capture
+# the extenuating circumstances that lead to these large outliers
+```
+
+## 6.1 Categorizing predictors
+```{r}
+numericVars <- which(sapply(df, is.numeric)) # indices 
+numericVarNames <- names(numericVars) # saving names
+
+numericVarNames <- numericVarNames[!(numericVarNames %in% c("SalePrice", "BldgGrade", "FinBasementGrade", "PresentUse", "MtRainier", "Olympics", "Cascades", "Territorial", "SeattleSkyline", "PugetSound", "LakeWashington", "LakeSammamish", "SmallLakeRiverCreek", "OtherView", "isNew", "isRenovated", "YrBuilt", "YrRenovated", "YrSold"))]
+
+dfNumeric <- df[, names(df) %in% numericVarNames]
+dfFactors <- df[, !names(df) %in% numericVarNames]
+# dim(dfFactors)
+dfFactors$SalePrice <- NULL
+
+```
+
+## 6.2 Normalizing numeric predictors
+
+```{r}
+# sapply(dfNumeric, function(x) skew(x))
+for(i in 1:ncol(dfNumeric)) {
+  if (abs(skew(dfNumeric[,i])) > 0.8) {
+    dfNumeric[,i] <- log(dfNumeric[,i] + 1)
+  }
+}
+# 
+# dfSkew <- sapply(dfNumeric, function(x) skew(x))
+# data.frame(V1=sort(dfSkew, decreasing=T))
+```
+
+```{r}
+
+pre <- preProcess(dfNumeric, method=c("center", "scale"))
+print(pre)
+
+dfNorm <- predict(pre, dfNumeric)
+dim(dfNorm)
+```
+## 6.3 One hot encoding to dummies
+```{r echo = T, results = 'hide'}
+dim(dfFactors)
+# narrowed <- dfFactors[, nearZeroVar(dfFactors, freqCut=99/1, uniqueCut=999)]
+# vv forgot to do this earlier
+dfFactors$PresentUse <- as.factor(dfFactors$PresentUse)
+dfDummies <- as.data.frame(model.matrix(~ . -1, dfFactors))
+dim(dfDummies)
+colnames(dfDummies)
+```
+
+### 6.3.1 Removing columns with few observations/variances
+```{r}
+dfDummies <- Filter(function(x)(length(unique(x))>1), dfDummies)
+dim(dfDummies)
+fewObservations <- which(colSums(dfDummies) < 10)
+colnames(dfDummies[fewObservations])
+dfDummies <- dfDummies[, -fewObservations]
+dim(dfDummies)
+```
+
+## 6.4 Combining vars
+```{r}
+dep_vars <- cbind(dfNorm, dfDummies)
+```
+
+## 6.5 Normalizing response var
+```{r}
+skew(df$SalePrice)
+qqnorm(df$SalePrice)
+qqline(df$SalePrice)
+
+bc <- boxcox(df$SalePrice ~ 1)
+lam <- bc$x[which.max(bc$y)]
+
+# test <- (df$SalePrice^lam - 1) / lam
+# skew(test)
+# qqnorm(test)
+# qqline(test)
+
+df$SalePrice <- log(df$SalePrice)
+
+# 
+skew(df$SalePrice)
+qqnorm(df$SalePrice)
+qqline(df$SalePrice)
+```
+
+
+
+# 7 Modeling
+
+## 7.1 Split into training and testing
+```{r}
+set.seed(3456)
+trainIndex <- createDataPartition(df$SalePrice, p=.8, list=FALSE, times=1)
+train_x <- dep_vars[trainIndex,]
+
+train_y <- df[trainIndex,]
+train_y <- train_y$SalePrice
+  
+test_x <- dep_vars[-trainIndex,]
+
+test_y <- df[-trainIndex,]
+test_y <- test_y$SalePrice
+
+
+# rm(list=ls()[! ls() %in% c("train_x","train_y", "test_x", "test_y", "df", "dep_vars", "lam")])
+# rm(list=ls()[! ls() %in% c("train_x","train_y", "test_x", "test_y")])
+# test <- seq(.00001, .001, by=.0001)
+# append(test, c(.005, .01, .05, .1, .5, 1))
+```
+
+
+## 7.2 LASSO
+```{r}
+
+str(train_x$YrBuilt)
+cntrl <- trainControl(method = "cv", number = 5)
+
+test_vals <- seq(.00001, .001, by=.0001)
+test_vals <- append(test_vals, c(.005, .01, .05, .1, .5, 1))
+
+lassoGrid <- expand.grid(alpha = 1, lambda = seq(.00001, .001, by=.0001))
+
+lasso_mod <- train(x=train_x, y=train_y, method="glmnet", trControl=cntrl, tuneGrid=lassoGrid)
+
+lasso_mod
+min(lasso_mod$results$RMSE)
+
+lassoVarImp <- varImp(lasso_mod, scale=FALSE)
+lassoImp <- lassoVarImp$importance
+
+
+varsSelected <- length(which(lassoImp$Overall!=0))
+varsNotSelected <- length(which(lassoImp$Overall==0))
+cat('Used: ', varsSelected)
+cat('Not Used: ', varsNotSelected)
+
+lassoPred <- predict(lasso_mod, test_x)
+lassoPred <- exp(lassoPred)
+```
+
+### 7.2.1 LASSO Evaluation
+```{r}
+lasso_mod$results$RMSE
+lasso_mod$results$lambda
+ggplot(lasso_mod$results, aes(lambda, RMSE)) +
+  geom_line()
+lassoRMSE <- sqrt(mean(exp(test_y) - lassoPred)^2)
+lassoRMSE
+
+######
+# sp <- exp(df$SalePrice)
+# spSD <- sd(sp)
+# spAVG <- mean(sp)
+# ((lassoPred - spAVG) / spSD)
+# 
+# mean(((exp(test_y) - spAVG) / spSD) - ((lassoPred - spAVG) / spSD)
+# )^2
+```
+
+
+## 7.3 Random forest
+
+### 7.3.1 Setting up parallelization
+```{r, eval=FALSE}
+library(foreach)
+library(doParallel)
+library(ranger)
+
+# Creating parallel computing cluster
+ncores <- parallel::detectCores() - 1
+computing_cluster <- parallel::makeCluster(
+  ncores,
+  type="PSOCK"
+)
+computing_cluster
+doParallel::registerDoParallel(cl = computing_cluster)
+foreach::getDoParRegistered()
+#how many workers are available? 
+foreach::getDoParWorkers()
+
+
+# Splitting into 100 folds
+# flds <- createFolds(train_y, k = 10, list = TRUE, returnTrain = FALSE)
+# str(train_x[flds[[1]], ])
+# str(train_y[flds[[1]]])
+rfGrid <- expand.grid(
+  mtry= c(27, 32, 37, 42)
+)
+
+prediction <- foreach(
+  .combine = 'c',
+  .packages = "ranger",
+  mtry=rfGrid$mtry
+  # i = 1:length(flds)
+) %dopar% {
+  # print(i)
+  # rfMod <- ranger::ranger(
+  #   x=train_x[flds[[i]], ],
+  #   y=train_y[flds[[i]]],
+  #   importance = "permutation",
+  #   classification=FALSE,
+  #   verbose = TRUE
+  # )
+  rfMod <- ranger::ranger(
+    x=train_x,
+    y=train_y,
+    # importance = "permutation",
+    classification=FALSE,
+    verbose = TRUE
+  )
+  return(rfMod)
+}
+# prediction
+rfMod <- ranger::ranger(
+  x=train_x,
+  y=train_y,
+  # importance = "permutation",
+  classification=FALSE,
+  verbose = TRUE
+)
+rfMod
+
+parallel::stopCluster(cl = my.cluster)
+```
+```{r}
+rfMod <- ranger::ranger(
+  x=train_x,
+  y=train_y,
+  # importance = "permutation",
+  classification=FALSE,
+  verbose = TRUE
+)
+```
+
+```{r}
+rfMod
+rfPredict <- predict(rfMod, data=test_x)
+rfPredict$predictions
+rfRMSE <- sqrt(mean(exp(test_y) - exp(rfPredict$predictions))^2)
+rfRMSE
+```
+
+```{r}
+library(xgboost)
+# library(ParBayesianOptimization)
+xgbTrain <- xgb.DMatrix(data=as.matrix(train_x), label=train_y)
+xgbTest <- xgb.DMatrix(data=as.matrix(test_x))
+
+params <- list(grow_policy="lossguide")
+
+xgb_mod <- xgb.train(data = xgbTrain, nrounds = 500, verbose = 2, grow_policy="lossguide", print_every_n = 10)
+
+
+xgbPred <- exp(predict(xgb_mod, xgbTest))
+xgbRMSE <- sqrt(mean(exp(test_y) - xgbPred)^2)
+xgbRMSE
+```
+
+```{r}
+xgbImportance <- xgb.importance(feature_names = colnames(train_x), model=xgb_mod)
+library(Ckmeans.1d.dp)
+xgb.ggplot.importance(xgbImportance[1:40], rel_to_first = T)
+```
+
+
+
+```{r}
+# rm(list=ls()[! ls() %in% c("xgb_mod", "rfMod", "lasso_mod")])
+
+save.image(file="env.RData") 
+```
+
+
+
+```{r}
+
+shap <- xgb.plot.shap(test_y, model=xgb_mod)
+shap <- xgb.plot.shap(as.matrix(test_x), model = xgb_mod, top_n = 12, n_col = 3)
+shap_sum <- xgb.ggplot.shap.summary(as.matrix(test_x), model = xgb_mod, top_n = 12)
+shap_sum
+shap
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
