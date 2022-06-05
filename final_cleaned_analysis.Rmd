@@ -547,6 +547,77 @@ result <- unique(rbind(result, data.frame(Model=c("PCR"),
 result
 ```
 
+```{r eval = FALSE}
+#New Double Lasso for Causal inference
+#Unable to get forumla to create as there are too many variables in our final_Df.
+library(hdm)
+
+
+#Creating portion of remaining colnames (excl independant and covariate of interest) to be used in formula
+#Function that didnt work as intended but still provided the full formula below
+selected = colnames(train_x_dl)
+featureNames <- (paste(colnames(train_x_dl), collapse = " + "))
+print(class(featureNames))
+
+#Use the created snippet in the terminal which can be pasted in the formula used to help create the model matrix
+fm1<-as.formula(~ -1 + SqFtTotLiving + SqFtTotLiving:(YrSold + MoSold + PropertyType + AFForestLand + AFCurrentUseLand + AFNonProfitUse + AFHistoricProperty + PropertyClass + BldgNbr + NbrLivingUnits + ZipCode + Stories + SqFtGarageBasement + SqFtGarageAttached + DaylightBasement + SqFtOpenPorch + SqFtEnclosedPorch + SqFtDeck + HeatSystem + HeatSource + BrickStone + Bedrooms + BathHalfCount + Bath3qtrCount + BathFullCount + FpSingleStory + FpMultiStory + FpFreestanding + YrBuilt + Obsolescence + PcntNetCondition + Condition + Section + LevyCode + HBUAsIfVacant + HBUAsImproved + PresentUse + SqFtLot + WaterSystem + SewerSystem + Access + Topography + StreetSurface + RestrictiveSzShape + InadequateParking + PcntUnusable + MtRainier + Olympics + Cascades + Territorial + SeattleSkyline + PugetSound + LakeWashington + LakeSammamish + SmallLakeRiverCreek + OtherView + WfntLocation + WfntFootage + WfntBank + WfntPoorQuality + WfntRestrictedAccess + TidelandShoreland + LotDepthFactor + TrafficNoise + NbrBldgSites + Contamination + HistoricSite) +(YrSold + MoSold + PropertyType + AFForestLand + AFCurrentUseLand + AFNonProfitUse + AFHistoricProperty + PropertyClass + BldgNbr + NbrLivingUnits + ZipCode + Stories + SqFtGarageBasement + SqFtGarageAttached + DaylightBasement + SqFtOpenPorch + SqFtEnclosedPorch + SqFtDeck + HeatSystem + HeatSource + BrickStone + Bedrooms + BathHalfCount + Bath3qtrCount + BathFullCount + FpSingleStory + FpMultiStory + FpFreestanding + YrBuilt + Obsolescence + PcntNetCondition + Condition + Section + LevyCode + HBUAsIfVacant + HBUAsImproved + PresentUse + SqFtLot + WaterSystem + SewerSystem + Access + Topography + StreetSurface + RestrictiveSzShape + InadequateParking + PcntUnusable + MtRainier + Olympics + Cascades + Territorial + SeattleSkyline + PugetSound + LakeWashington + LakeSammamish + SmallLakeRiverCreek + OtherView + WfntLocation + WfntFootage + WfntBank + WfntPoorQuality + WfntRestrictedAccess + TidelandShoreland + LotDepthFactor + TrafficNoise + NbrBldgSites + Contamination + HistoricSite)^2)
+
+#create a matrix of all variables and interactions
+
+X <- model.matrix(fm1, data = data.frame(train_x))
+#check the column names
+colnames(X)
+dim(X) 
+
+X <- X[, which(apply(X, 2, var) != 0)] # exclude all constant variables
+dim(X)  #check dimensions
+
+index.SqFtTotLiving <- grep("SqFtTotLiving", colnames(X)) #find the index of the columns in X that have the string "SqFtTotLiving" as part of their name
+
+colnames(X)[index.SqFtTotLiving]  #check to see we got them all
+y <- train_y  #from the final data frame take log sales price and create a new vector y as a copy, y, will become our new dependent variable
+
+
+
+reg.out<-lm(y~X)
+
+index.SqFtTotLiving.regout<-grep("SqFtTotLiving",names(reg.out$coefficients)) #coefficients for SqFtTotLiving &interactions
+#allowing p-hacking
+(pvals.reg.out = p_adjust(reg.out, method = "RW", B = 1000,test.index = index.SqFtTotLiving.regout))
+
+
+# residualization
+index.SqFtTotLiving <- grep("SqFtTotLiving", colnames(X))
+effects.SqFtTotLiving <- rlassoEffects(x = X, y = y, index = index.SqFtTotLiving) #double lasso regress y on X with the columns in index.SqFtTotalLivng as focal
+summary(effects.SqFtTotLiving) #look at the results
+pvals.effects.SqFtTotLiving <- p_adjust(effects.SqFtTotLiving, method = "RW", B = 1000)
+pvals.effects.SqFtTotLiving
+#Partialling out
+effects.SqFtTotLiving.ds <- rlassoEffects(x = X, y = y, method="double selection",index = index.gender) #double lasso regress y on X with the columns in index.livingspace as focal
+summary(effects.SqFtTotLiving.ds)
+#allowing p-hacking using adjusted p-values
+(pvals.effects.SqFtTotLiving.ds<-p_adjust(effects.SqFtTotLiving.ds))
+
+#new formula w/o interactions
+fm2<-as.formula(~-1 + SqFtTotLiving +(YrSold + MoSold + PropertyType + AFForestLand + AFCurrentUseLand + AFNonProfitUse + AFHistoricProperty + PropertyClass + BldgNbr + NbrLivingUnits + ZipCode + Stories + SqFtGarageBasement + SqFtGarageAttached + DaylightBasement + SqFtOpenPorch + SqFtEnclosedPorch + SqFtDeck + HeatSystem + HeatSource + BrickStone + Bedrooms + BathHalfCount + Bath3qtrCount + BathFullCount + FpSingleStory + FpMultiStory + FpFreestanding + YrBuilt + Obsolescence + PcntNetCondition + Condition + Section + LevyCode + HBUAsIfVacant + HBUAsImproved + PresentUse + SqFtLot + WaterSystem + SewerSystem + Access + Topography + StreetSurface + RestrictiveSzShape + InadequateParking + PcntUnusable + MtRainier + Olympics + Cascades + Territorial + SeattleSkyline + PugetSound + LakeWashington + LakeSammamish + SmallLakeRiverCreek + OtherView + WfntLocation + WfntFootage + WfntBank + WfntPoorQuality + WfntRestrictedAccess + TidelandShoreland + LotDepthFactor + TrafficNoise + NbrBldgSites + Contamination + HistoricSite)^2)
+
+Z <- model.matrix(fm2,data = final_df)                                                              
+
+
+Z <- Z[, which(apply(Z, 2, var) != 0)] # exclude all constant variables
+colnames(Z)
+
+index.SqFtTotLiving.2 <- grep("SqFtTotLiving", colnames(Z))
+effects.SqFtTotLiving.only <- rlassoEffects(x = Z, y = y, index = index.SqFtTotLiving.2)
+summary(effects.SqFtTotLiving.only)
+
+
+
+
+
+
+```
+
 
 ## Data Sets Considered - Not Included 
 
