@@ -56,7 +56,6 @@ sales <- sales_clean %>%
   mutate(Pandemic = if_else(
     YrSold >= 2020, 1, 0
   ))
-
 combineID <- function(df) {
   df %>% 
     mutate(mm_key = paste0(Major, '-', Minor), .before = 1) %>% 
@@ -241,12 +240,10 @@ data_use <- final_df_2 %>%
          WfntFootage = log(WfntFootage + 1)) %>% 
   as.data.frame() %>% 
   relocate(SalePrice, .before = YrSold)
-
-data_use[, 2:80] <- scale(data_use[, 2:80])
-
+data_use[, 2:82] <- scale(data_use[, 2:82])
 # Check for multicollinearity 
 # Create correlation table to inspect collinearity 
-check_cor <- as.data.frame(cor(data_use[, 2:80])) %>% 
+check_cor <- as.data.frame(cor(data_use[, 2:82])) %>% 
   mutate_if(is.numeric, ~round(., 2)) 
 #corrplot(cor(data_use[, 2:80]), diag = FALSE, order = "AOE", tl.pos = "td", tl.cex = 1.0, method = "number", type = "upper")
 # drop hioghly correlated and other redundant variables
@@ -316,13 +313,9 @@ result <- data.frame(Model=character(),
 
 ```{r OLS}
 ols.fit <- lm(SalePrice ~., data = train_set)
-
 pred.ols <- predict(ols.fit, as.data.frame(validation_x))
-
 ols.rmse <- sqrt(mean((exp(pred.ols) - exp(validation_set$SalePrice))^2))
-
 ols.r2 <- summary(ols.fit)$r.squared
-
 result <- unique(rbind(result, data.frame(Model=c("OLS"),
                                           RMSE = c(ols.rmse),
                                           CVR2=c(ols.r2))))
